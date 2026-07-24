@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "MyTherapyPath",
+    "slug": "client-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "MyTherapyPath needs camera access so you can upload proof of your exercises.",
+          "microphonePermission": "MyTherapyPath needs microphone access to record exercise videos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#6366F1"
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "MyTherapyPath needs camera access so you can upload proof of your exercises.",
+        "NSMicrophoneUsageDescription": "MyTherapyPath needs microphone access to record exercise videos.",
+        "NSPhotoLibraryUsageDescription": "MyTherapyPath needs photo library access to select exercise proof."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

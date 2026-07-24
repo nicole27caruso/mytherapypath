@@ -1,0 +1,8 @@
+{
+  "name": "mytherapypath",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
