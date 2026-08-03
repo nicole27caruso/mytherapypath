@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useApp } from '@/lib/app-context'
 import type { SubmissionEntry } from '@/lib/mock-data'
@@ -105,10 +105,39 @@ type SubFilter = 'all' | 'pending' | 'approved' | 'rejected'
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ClientHistoryPage({ params }: { params: { id: string } }) {
-  const { clientList, clientPrograms, submissionList, rejectionNotes } = useApp()
+  const { clientList, clientPrograms, submissionList, isLoading } = useApp()
   const [subFilter, setSubFilter] = useState<SubFilter>('all')
 
   const client = clientList.find(c => c.id === params.id)
+
+  const [programDuration, setProgramDuration] = useState<string | null>(null)
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (!client) { setProgramDuration(null); return }
+      const programStartDate = client.programCreatedAt ?? client.createdAt
+      if (!programStartDate) { setProgramDuration(null); return }
+      const days = Math.max(1, Math.round((Date.now() - new Date(programStartDate).getTime()) / 86400000))
+      let result: string
+      if (days < 7) result = `${days} day${days === 1 ? '' : 's'}`
+      else if (days < 30) result = `${Math.round(days / 7)} wk`
+      else result = `${Math.round(days / 30)} mo`
+      setProgramDuration(result)
+    }, 0)
+    return () => clearTimeout(id)
+  }, [client?.programCreatedAt, client?.createdAt, client])
+
+  if (isLoading) {
+    return (
+      <div className="p-8">
+        <Link href="/clients" className="flex items-center gap-2 text-sm text-slate-500 hover:text-teal-600 mb-6">
+          <ArrowLeft className="w-4 h-4" /> Back to Clients
+        </Link>
+        <p className="text-slate-500">Loading client information…</p>
+      </div>
+    )
+  }
+
   if (!client) {
     return (
       <div className="p-8">
@@ -178,6 +207,12 @@ export default function ClientHistoryPage({ params }: { params: { id: string } }
             </Badge>
           </div>
           <p className="text-slate-500">Age {client.age} · {client.condition}</p>
+          {client.dob && (
+            <p className="text-xs text-slate-400 mt-0.5">DOB: {new Date(client.dob).toLocaleDateString()}</p>
+          )}
+          {client.diagnosis && (
+            <p className="text-xs text-slate-400 mt-0.5">Diagnosis: {client.diagnosis}</p>
+          )}
           <p className="text-xs text-slate-400 mt-0.5">{client.program}</p>
         </div>
         <div className="flex gap-2">
@@ -197,6 +232,12 @@ export default function ClientHistoryPage({ params }: { params: { id: string } }
             <p className="text-xl font-bold text-slate-900">{freq}x</p>
             <p className="text-xs text-slate-500 mt-0.5">Per week</p>
           </div>
+          {programDuration && (
+            <div className="text-center px-4 py-2 bg-slate-50 rounded-lg border">
+              <p className="text-xl font-bold text-slate-900">{programDuration}</p>
+              <p className="text-xs text-slate-500 mt-0.5">In program</p>
+            </div>
+          )}
         </div>
       </div>
 

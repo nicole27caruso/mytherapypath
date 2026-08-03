@@ -309,6 +309,82 @@ Deletes an exercise template.
 
 ---
 
+## Program Templates
+
+### `GET /v1/program-templates`
+Returns all reusable program templates.
+
+**Sample Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "title": "Workstation Wrist Recovery",
+    "description": "Program focused on nerve glides and wrist neutral control for desk workers.",
+    "category": "Upper extremity",
+    "body_region": "Wrist / Hand",
+    "injury_type": "Carpal Tunnel Syndrome",
+    "functional_focus": "Nerve mobility, wrist control, grip strength",
+    "recovery_phase": "Subacute",
+    "goals": "Improve median nerve gliding and reduce wrist strain during typing.",
+    "ergonomic_recommendations": "Use a neutral keyboard setup, wrist support, and hourly microbreaks.",
+    "precautions": "Avoid sustained wrist flexion or forceful gripping during flares.",
+    "equipment_needed": "Theraband, small therapy ball",
+    "progression_criteria": "Improved wrist posture and decreased numbness.",
+    "frequency_per_week": 4,
+    "schedule_days": "Mon,Wed,Fri",
+    "created_at": "2026-08-03T12:00:00",
+    "exercises": [
+      {
+        "id": "uuid",
+        "order": 0,
+        "template": {
+          "id": "uuid",
+          "title": "Median Nerve Glide",
+          "description": null,
+          "instructions": "Perform median nerve gliding...",
+          "video_url": null,
+          "category": null,
+          "duration_minutes": 8,
+          "created_at": "2026-08-03T12:00:00"
+        }
+      }
+    ]
+  }
+]
+```
+
+### `POST /v1/program-templates`
+Creates a new reusable program template.
+
+**Request Body:**
+```json
+{
+  "title": "Workstation Wrist Recovery",
+  "description": "Program focused on nerve glides and wrist neutral control for desk workers.",
+  "category": "Upper extremity",
+  "body_region": "Wrist / Hand",
+  "injury_type": "Carpal Tunnel Syndrome",
+  "functional_focus": "Nerve mobility, wrist control, grip strength",
+  "recovery_phase": "Subacute",
+  "goals": "Improve median nerve gliding and reduce wrist strain during typing.",
+  "ergonomic_recommendations": "Use a neutral keyboard setup, wrist support, and hourly microbreaks.",
+  "precautions": "Avoid sustained wrist flexion or forceful gripping during flares.",
+  "equipment_needed": "Theraband, small therapy ball",
+  "progression_criteria": "Improved wrist posture and decreased numbness.",
+  "frequency_per_week": 4,
+  "schedule_days": "Mon,Wed,Fri",
+  "template_ids": ["uuid-1", "uuid-2", "uuid-3"]
+}
+```
+
+### `DELETE /v1/program-templates/{id}`
+Deletes a program template.
+
+**Response (204 No Content):** empty body
+
+---
+
 ## Programs
 
 ### `GET /v1/programs/{client_id}`

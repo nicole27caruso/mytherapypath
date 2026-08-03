@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 
-from app.routers import clients, submissions, templates, programs, dashboard, mobile
+from app.routers import clients, submissions, templates, programs, dashboard, mobile, program_templates
 
 load_dotenv()
 
@@ -18,12 +18,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(clients.router,     prefix="/v1")
-app.include_router(submissions.router, prefix="/v1")
-app.include_router(templates.router,   prefix="/v1")
-app.include_router(programs.router,    prefix="/v1")
-app.include_router(dashboard.router,   prefix="/v1")
-app.include_router(mobile.router,      prefix="/v1")
+app.include_router(clients.router,         prefix="/v1")
+app.include_router(submissions.router,     prefix="/v1")
+app.include_router(templates.router,       prefix="/v1")
+app.include_router(programs.router,        prefix="/v1")
+app.include_router(program_templates.router, prefix="/v1")
+app.include_router(dashboard.router,       prefix="/v1")
+app.include_router(mobile.router,          prefix="/v1")
 
 
 @app.get("/health")

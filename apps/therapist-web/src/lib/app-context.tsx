@@ -1,17 +1,25 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { templates } from '@/lib/mock-data'
 import type { SubmissionEntry } from '@/lib/mock-data'
 import type { NewClient } from '@/components/new-client-modal'
 import type { ClientProgramState } from '@/components/view-program-drawer'
-import { api, THERAPIST_ID, type ApiClient, type ApiSubmission } from '@/lib/api'
+import { api, THERAPIST_ID, type ApiClient, type ApiProgram, type ApiProgramTemplate, type ApiSubmission } from '@/lib/api'
 
 type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string }
 
 type AppContextValue = {
   clientList: NewClient[]
   clientPrograms: Record<string, ClientProgramState>
+  programTemplates: ApiProgramTemplate[]
+  refreshProgramTemplates: () => Promise<void>
+  createProgramTemplate: (body: {
+    title: string; description?: string | null; category?: string | null;
+    body_region?: string | null; injury_type?: string | null; functional_focus?: string | null;
+    recovery_phase?: string | null; goals?: string | null; ergonomic_recommendations?: string | null;
+    precautions?: string | null; equipment_needed?: string | null; progression_criteria?: string | null;
+    frequency_per_week?: number | null; schedule_days?: string | null; template_ids: string[]
+  }) => Promise<ApiProgramTemplate>
   submissionList: SubmissionEntry[]
   approved: Set<string>
   rejected: Set<string>
@@ -19,7 +27,7 @@ type AppContextValue = {
   isLoading: boolean
   addClient: (client: NewClient) => Promise<void>
   toggleClientStatus: (id: string) => Promise<void>
-  handleAssign: (clientId: string, exercises: ExerciseEntry[], frequency: number) => void
+  handleAssign: (clientId: string, exercises: ExerciseEntry[], frequency: number, notes: string) => void
   handleSaveProgram: (clientId: string, state: ClientProgramState) => void
   signOff: (id: string, note: string) => Promise<void>
   reject: (id: string, note: string) => Promise<void>
@@ -38,7 +46,9 @@ function toNewClient(c: ApiClient): NewClient {
     name: c.name,
     initials: getInitials(c.name),
     age: c.age ?? 0,
+    dob: c.dob ?? null,
     condition: c.condition ?? '',
+    diagnosis: c.diagnosis ?? '',
     program: c.program?.name ?? 'Program not yet assigned',
     frequency: c.frequency,
     completedThisWeek: c.completed_this_week,
@@ -46,7 +56,65 @@ function toNewClient(c: ApiClient): NewClient {
     status: c.status as 'active' | 'inactive',
     lastActivity: '',
     color: c.color ?? 'bg-blue-100 text-blue-700',
+    createdAt: c.created_at,
+    programCreatedAt: c.program?.created_at ?? undefined,
   }
+}
+
+function programToState(prog: ApiProgram): ClientProgramState {
+  return {
+    exercises: [...prog.exercises]
+      .sort((a, b) => a.order - b.order)
+      .map(pe => ({
+        name: pe.template.title,
+        videoUrl: pe.template.video_url ?? '',
+        instructions: pe.template.instructions ?? '',
+        duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
+      })),
+    frequency: prog.frequency_per_week,
+    notes: prog.notes ?? '',
+    schedule: prog.schedule_days ? prog.schedule_days.split(',').filter(Boolean) : [],
+  }
+}
+
+// Exercises don't carry a template id from the UI, so saving a program means
+// resolving each exercise to a backend ExerciseTemplate — reusing one that
+// already matches by title, creating a new one otherwise — before replacing
+// the program with the full resolved list (the API replaces, it doesn't merge).
+async function persistProgram(
+  clientId: string,
+  exercises: ExerciseEntry[],
+  frequency: number,
+  notes: string,
+  schedule: string[]
+): Promise<ApiProgram> {
+  const existingTemplates = await api.templates.list()
+  const templateByTitle = new Map(existingTemplates.map(t => [t.title.trim().toLowerCase(), t]))
+
+  const templateIds: string[] = []
+  for (const ex of exercises) {
+    const key = ex.name.trim().toLowerCase()
+    let template = templateByTitle.get(key)
+    if (!template) {
+      const minutesMatch = ex.duration.match(/\d+/)
+      template = await api.templates.create({
+        title: ex.name.trim(),
+        instructions: ex.instructions || null,
+        video_url: ex.videoUrl || null,
+        duration_minutes: minutesMatch ? parseInt(minutesMatch[0], 10) : null,
+      })
+      templateByTitle.set(key, template)
+    }
+    templateIds.push(template.id)
+  }
+
+  return api.programs.save({
+    client_id: clientId,
+    frequency_per_week: frequency,
+    notes: notes || null,
+    schedule_days: schedule.length ? schedule.join(',') : null,
+    template_ids: templateIds,
+  })
 }
 
 function toSubmissionEntry(sub: ApiSubmission, clientsMap: Map<string, ApiClient>): SubmissionEntry {
@@ -73,6 +141,7 @@ const AppContext = createContext<AppContextValue | null>(null)
 export function AppProvider({ children }: { children: ReactNode }) {
   const [clientList, setClientList] = useState<NewClient[]>([])
   const [clientPrograms, setClientPrograms] = useState<Record<string, ClientProgramState>>({})
+  const [programTemplates, setProgramTemplates] = useState<ApiProgramTemplate[]>([])
   const [submissionList, setSubmissionList] = useState<SubmissionEntry[]>([])
   const [approved, setApproved] = useState<Set<string>>(new Set())
   const [rejected, setRejected] = useState<Set<string>>(new Set())
@@ -82,12 +151,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function load() {
       try {
-        const [rawClients, rawSubs] = await Promise.all([
+        const [rawClients, rawSubs, rawTemplateList] = await Promise.all([
           api.clients.list(),
           api.submissions.list(),
+          api.programTemplates.list(),
         ])
         const clientsMap = new Map(rawClients.map(c => [c.id, c]))
         setClientList(rawClients.map(toNewClient))
+        setProgramTemplates(rawTemplateList)
+
+        const programEntries = await Promise.all(
+          rawClients.map(async c => [c.id, await api.programs.get(c.id)] as const)
+        )
+        const programsMap: Record<string, ClientProgramState> = {}
+        for (const [id, prog] of programEntries) {
+          if (prog) programsMap[id] = programToState(prog)
+        }
+        setClientPrograms(programsMap)
+
         const subs = rawSubs.map(s => toSubmissionEntry(s, clientsMap))
         setSubmissionList(subs)
         setApproved(new Set(subs.filter(s => s.status === 'approved').map(s => s.id)))
@@ -104,13 +185,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     load()
   }, [])
 
+  async function refreshProgramTemplates() {
+    try {
+      const rawTemplateList = await api.programTemplates.list()
+      setProgramTemplates(rawTemplateList)
+    } catch (err) {
+      console.error('Failed to load program templates:', err)
+    }
+  }
+
+  async function createProgramTemplate(body: {
+    title: string; description?: string | null; category?: string | null;
+    body_region?: string | null; injury_type?: string | null; functional_focus?: string | null;
+    recovery_phase?: string | null; goals?: string | null; ergonomic_recommendations?: string | null;
+    precautions?: string | null; equipment_needed?: string | null; progression_criteria?: string | null;
+    frequency_per_week?: number | null; schedule_days?: string | null; template_ids: string[]
+  }) {
+    const created = await api.programTemplates.create(body)
+    setProgramTemplates(prev => [...prev, created])
+    return created
+  }
+
   async function addClient(client: NewClient) {
     try {
       const created = await api.clients.create({
         therapist_id: THERAPIST_ID,
         name: client.name,
         age: client.age,
+        dob: client.dob ?? null,
         condition: client.condition,
+        diagnosis: client.diagnosis ?? null,
         color: client.color,
         frequency: client.frequency,
         next_session: client.nextSession === '—' ? null : client.nextSession,
@@ -118,17 +222,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })
       setClientList(prev => [...prev, toNewClient(created)])
       if (client.templateId) {
-        const t = templates.find(tmpl => tmpl.id === client.templateId)
+        const t = programTemplates.find(tmpl => tmpl.id === client.templateId)
         if (t) {
-          setClientPrograms(prev => ({
-            ...prev,
-            [created.id]: {
-              exercises: t.exercises.map(name => ({ name, videoUrl: '', instructions: '', duration: '' })),
-              frequency: t.frequency,
-              notes: '',
-              schedule: [],
-            },
+          const exercises = t.exercises.map(pe => ({
+            name: pe.template.title,
+            videoUrl: pe.template.video_url ?? '',
+            instructions: pe.template.instructions ?? '',
+            duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
           }))
+          try {
+            const saved = await persistProgram(created.id, exercises, t.frequency_per_week ?? 3, '', [])
+            setClientPrograms(prev => ({ ...prev, [created.id]: programToState(saved) }))
+          } catch (err) {
+            console.error('Failed to save starter program:', err)
+          }
         }
       }
     } catch (err) {
@@ -149,20 +256,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function handleAssign(clientId: string, exercises: ExerciseEntry[], frequency: number) {
-    setClientPrograms(prev => ({
-      ...prev,
-      [clientId]: {
-        exercises,
-        frequency,
-        notes: prev[clientId]?.notes ?? '',
-        schedule: prev[clientId]?.schedule ?? [],
-      },
-    }))
+  function handleAssign(clientId: string, exercises: ExerciseEntry[], frequency: number, notes: string) {
+    const schedule = clientPrograms[clientId]?.schedule ?? []
+    persistProgram(clientId, exercises, frequency, notes, schedule)
+      .then(saved => setClientPrograms(prev => ({ ...prev, [clientId]: programToState(saved) })))
+      .catch(err => console.error('Failed to save program:', err))
   }
 
   function handleSaveProgram(clientId: string, state: ClientProgramState) {
-    setClientPrograms(prev => ({ ...prev, [clientId]: state }))
+    persistProgram(clientId, state.exercises, state.frequency, state.notes, state.schedule)
+      .then(saved => setClientPrograms(prev => ({ ...prev, [clientId]: programToState(saved) })))
+      .catch(err => console.error('Failed to save program:', err))
   }
 
   async function signOff(id: string, note: string) {
@@ -192,7 +296,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      clientList, clientPrograms, submissionList, approved, rejected, rejectionNotes,
+      clientList, clientPrograms, programTemplates, refreshProgramTemplates, createProgramTemplate, submissionList, approved, rejected, rejectionNotes,
       isLoading, addClient, toggleClientStatus, handleAssign, handleSaveProgram, signOff, reject,
     }}>
       {children}

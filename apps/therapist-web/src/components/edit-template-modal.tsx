@@ -11,6 +11,13 @@ export type EditableTemplate = {
   id: string
   name: string
   description: string
+  bodyRegion: string
+  injuryType: string
+  phase: string
+  focus: string
+  ergonomics: string
+  equipment: string
+  precautions: string
   exercises: ExerciseEntry[]
   frequency: number
   duration: string
@@ -29,6 +36,13 @@ interface EditTemplateModalProps {
 export function EditTemplateModal({ template, open, onClose, onSave }: EditTemplateModalProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [bodyRegion, setBodyRegion] = useState('')
+  const [injuryType, setInjuryType] = useState('')
+  const [phase, setPhase] = useState('')
+  const [focus, setFocus] = useState('')
+  const [ergonomics, setErgonomics] = useState('')
+  const [equipment, setEquipment] = useState('')
+  const [precautions, setPrecautions] = useState('')
   const [exercises, setExercises] = useState<ExerciseEntry[]>([{ name: '', videoUrl: '' }])
   const [frequency, setFrequency] = useState(3)
   const [duration, setDuration] = useState('')
@@ -36,10 +50,18 @@ export function EditTemplateModal({ template, open, onClose, onSave }: EditTempl
   const [saved, setSaved] = useState(false)
   const [videoExpanded, setVideoExpanded] = useState<Set<number>>(new Set())
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (template && open) {
       setName(template.name)
       setDescription(template.description)
+      setBodyRegion(template.bodyRegion)
+      setInjuryType(template.injuryType)
+      setPhase(template.phase)
+      setFocus(template.focus)
+      setErgonomics(template.ergonomics)
+      setEquipment(template.equipment)
+      setPrecautions(template.precautions)
       setExercises(template.exercises.length > 0 ? template.exercises : [{ name: '', videoUrl: '' }])
       setFrequency(template.frequency)
       setDuration(template.duration)
@@ -50,6 +72,7 @@ export function EditTemplateModal({ template, open, onClose, onSave }: EditTempl
       setVideoExpanded(expanded)
     }
   }, [template, open])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function updateName(i: number, val: string) {
     setExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, name: val } : ex))
@@ -82,6 +105,13 @@ export function EditTemplateModal({ template, open, onClose, onSave }: EditTempl
       ...template,
       name: name.trim(),
       description: description.trim(),
+      bodyRegion: bodyRegion.trim(),
+      injuryType: injuryType.trim(),
+      phase: phase.trim(),
+      focus: focus.trim(),
+      ergonomics: ergonomics.trim(),
+      equipment: equipment.trim(),
+      precautions: precautions.trim(),
       exercises: exercises.filter(e => e.name.trim()),
       frequency,
       duration: duration.trim(),
@@ -126,6 +156,41 @@ export function EditTemplateModal({ template, open, onClose, onSave }: EditTempl
                 value={description}
                 onChange={e => setDescription(e.target.value)}
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Body Region</label>
+                <Input value={bodyRegion} onChange={e => setBodyRegion(e.target.value)} placeholder="e.g. Wrist / Hand" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Injury Type</label>
+                <Input value={injuryType} onChange={e => setInjuryType(e.target.value)} placeholder="e.g. Carpal Tunnel" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Phase</label>
+                <Input value={phase} onChange={e => setPhase(e.target.value)} placeholder="e.g. Subacute" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Focus</label>
+                <Input value={focus} onChange={e => setFocus(e.target.value)} placeholder="e.g. Strength, dexterity" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Ergonomics</label>
+                <Input value={ergonomics} onChange={e => setErgonomics(e.target.value)} placeholder="e.g. Neutral wrist setup" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Equipment</label>
+                <Input value={equipment} onChange={e => setEquipment(e.target.value)} placeholder="e.g. Therapy ball" />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1.5">Precautions</label>
+              <Input value={precautions} onChange={e => setPrecautions(e.target.value)} placeholder="e.g. Avoid flare-ups" />
             </div>
 
             <div>

@@ -4,15 +4,24 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { X, Plus } from 'lucide-react'
+import type { EditableTemplate } from '@/components/edit-template-modal'
 
 interface NewTemplateModalProps {
   open: boolean
   onClose: () => void
+  onCreate: (template: EditableTemplate) => Promise<void>
 }
 
-export function NewTemplateModal({ open, onClose }: NewTemplateModalProps) {
+export function NewTemplateModal({ open, onClose, onCreate }: NewTemplateModalProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [bodyRegion, setBodyRegion] = useState('')
+  const [injuryType, setInjuryType] = useState('')
+  const [phase, setPhase] = useState('')
+  const [focus, setFocus] = useState('')
+  const [ergonomics, setErgonomics] = useState('')
+  const [equipment, setEquipment] = useState('')
+  const [precautions, setPrecautions] = useState('')
   const [exercises, setExercises] = useState<string[]>([''])
   const [frequency, setFrequency] = useState(3)
   const [duration, setDuration] = useState('')
@@ -30,6 +39,13 @@ export function NewTemplateModal({ open, onClose }: NewTemplateModalProps) {
   function handleClose() {
     setName('')
     setDescription('')
+    setBodyRegion('')
+    setInjuryType('')
+    setPhase('')
+    setFocus('')
+    setErgonomics('')
+    setEquipment('')
+    setPrecautions('')
     setExercises([''])
     setFrequency(3)
     setDuration('')
@@ -38,7 +54,27 @@ export function NewTemplateModal({ open, onClose }: NewTemplateModalProps) {
     onClose()
   }
 
-  function handleSave() {
+  async function handleSave() {
+    const template: EditableTemplate = {
+      id: `new-${Date.now()}`,
+      name: name.trim(),
+      description: description.trim(),
+      bodyRegion: bodyRegion.trim(),
+      injuryType: injuryType.trim(),
+      phase: phase.trim(),
+      focus: focus.trim(),
+      ergonomics: ergonomics.trim(),
+      equipment: equipment.trim(),
+      precautions: precautions.trim(),
+      exercises: exercises.filter(e => e.trim()).map(ex => ({ name: ex.trim(), videoUrl: '' })),
+      frequency,
+      duration: duration.trim(),
+      ageRange: ageRange.trim(),
+      useCount: 0,
+      color: 'bg-slate-100',
+    }
+
+    await onCreate(template)
     setSaved(true)
     setTimeout(() => handleClose(), 1500)
   }
@@ -83,6 +119,44 @@ export function NewTemplateModal({ open, onClose }: NewTemplateModalProps) {
                 value={description}
                 onChange={e => setDescription(e.target.value)}
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Body Region</label>
+                <Input value={bodyRegion} onChange={e => setBodyRegion(e.target.value)} placeholder="e.g. Wrist / Hand" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Injury Type</label>
+                <Input value={injuryType} onChange={e => setInjuryType(e.target.value)} placeholder="e.g. Carpal Tunnel" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Phase</label>
+                <Input value={phase} onChange={e => setPhase(e.target.value)} placeholder="e.g. Subacute" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Focus</label>
+                <Input value={focus} onChange={e => setFocus(e.target.value)} placeholder="e.g. Strength" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Ergonomics</label>
+                <Input value={ergonomics} onChange={e => setErgonomics(e.target.value)} placeholder="e.g. Neutral setup" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Equipment</label>
+                <Input value={equipment} onChange={e => setEquipment(e.target.value)} placeholder="e.g. Therapy ball" />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1.5">Precautions</label>
+              <Input value={precautions} onChange={e => setPrecautions(e.target.value)} placeholder="e.g. Avoid flare-ups" />
             </div>
 
             <div>

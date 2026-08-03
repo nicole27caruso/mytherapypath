@@ -163,7 +163,10 @@ export default function ClientsPage() {
         open={drawerClientId !== null}
         onClose={() => setDrawerClientId(null)}
         preselectedClientId={drawerClientId ?? undefined}
-        onAssign={(id, exercises, frequency) => handleAssign(id, exercises, frequency)}
+        existingExercises={drawerClientId ? clientPrograms[drawerClientId]?.exercises : undefined}
+        existingFrequency={drawerClientId ? clientPrograms[drawerClientId]?.frequency : undefined}
+        existingNotes={drawerClientId ? clientPrograms[drawerClientId]?.notes : undefined}
+        onAssign={(id, exercises, frequency, notes) => handleAssign(id, exercises, frequency, notes)}
       />
 
       <ViewProgramDrawer

@@ -25,6 +25,7 @@ def get_client(client_id: str, db: Session = Depends(get_db)):
         .options(
             joinedload(models.Client.program).joinedload(models.Program.exercises).joinedload(models.ProgramExercise.template),
             joinedload(models.Client.submissions),
+            joinedload(models.Client.notes),
         )
         .filter(models.Client.id == client_id)
         .first()

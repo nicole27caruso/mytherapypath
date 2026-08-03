@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 
 
 # ── Exercise Template ─────────────────────────────────────────────────────────
@@ -42,13 +42,81 @@ class ProgramOut(BaseModel):
     client_id: str
     name: Optional[str] = None
     frequency_per_week: int
+    notes: Optional[str] = None
+    schedule_days: Optional[str] = None
+    created_at: datetime
     exercises: list[ProgramExerciseOut] = []
 
 class ProgramCreate(BaseModel):
     client_id: str
     name: Optional[str] = None
     frequency_per_week: int = 3
+    notes: Optional[str] = None
+    schedule_days: Optional[str] = None
     template_ids: list[str] = []
+
+
+class ProgramTemplateExerciseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    order: int
+    template: TemplateOut
+
+
+class ProgramTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    title: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    body_region: Optional[str] = None
+    injury_type: Optional[str] = None
+    functional_focus: Optional[str] = None
+    recovery_phase: Optional[str] = None
+    goals: Optional[str] = None
+    ergonomic_recommendations: Optional[str] = None
+    precautions: Optional[str] = None
+    equipment_needed: Optional[str] = None
+    progression_criteria: Optional[str] = None
+    frequency_per_week: int = 3
+    schedule_days: Optional[str] = None
+    created_at: datetime
+    exercises: list[ProgramTemplateExerciseOut] = []
+
+
+class ProgramTemplateCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    body_region: Optional[str] = None
+    injury_type: Optional[str] = None
+    functional_focus: Optional[str] = None
+    recovery_phase: Optional[str] = None
+    goals: Optional[str] = None
+    ergonomic_recommendations: Optional[str] = None
+    precautions: Optional[str] = None
+    equipment_needed: Optional[str] = None
+    progression_criteria: Optional[str] = None
+    frequency_per_week: int = 3
+    schedule_days: Optional[str] = None
+    template_ids: list[str] = []
+
+class ProgramTemplateUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    body_region: Optional[str] = None
+    injury_type: Optional[str] = None
+    functional_focus: Optional[str] = None
+    recovery_phase: Optional[str] = None
+    goals: Optional[str] = None
+    ergonomic_recommendations: Optional[str] = None
+    precautions: Optional[str] = None
+    equipment_needed: Optional[str] = None
+    progression_criteria: Optional[str] = None
+    frequency_per_week: Optional[int] = None
+    schedule_days: Optional[str] = None
+    template_ids: Optional[list[str]] = None
 
 
 # ── Submission ────────────────────────────────────────────────────────────────
@@ -84,7 +152,9 @@ class SubmissionReject(BaseModel):
 class ClientBase(BaseModel):
     name: str
     age: Optional[int] = None
+    dob: Optional[date] = None
     condition: Optional[str] = None
+    diagnosis: Optional[str] = None
     color: Optional[str] = "bg-blue-100 text-blue-700"
     frequency: int = 3
     next_session: Optional[str] = None
@@ -96,7 +166,9 @@ class ClientCreate(ClientBase):
 class ClientUpdate(BaseModel):
     name: Optional[str] = None
     age: Optional[int] = None
+    dob: Optional[date] = None
     condition: Optional[str] = None
+    diagnosis: Optional[str] = None
     status: Optional[str] = None
     frequency: Optional[int] = None
     completed_this_week: Optional[int] = None
@@ -112,12 +184,6 @@ class ClientOut(ClientBase):
     created_at: datetime
     program: Optional[ProgramSummary] = None
 
-class ClientDetail(ClientOut):
-    model_config = ConfigDict(from_attributes=True)
-    submissions: list[SubmissionOut] = []
-    program: Optional[ProgramOut] = None
-
-
 # ── Therapist Note ────────────────────────────────────────────────────────────
 
 class NoteCreate(BaseModel):
@@ -131,6 +197,13 @@ class NoteOut(BaseModel):
     therapist_id: str
     text: str
     created_at: datetime
+
+
+class ClientDetail(ClientOut):
+    model_config = ConfigDict(from_attributes=True)
+    submissions: list[SubmissionOut] = []
+    notes: list[NoteOut] = []
+    program: Optional[ProgramOut] = None
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────

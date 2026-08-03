@@ -34,6 +34,8 @@ def create_or_replace_program(body: schemas.ProgramCreate, db: Session = Depends
         client_id=body.client_id,
         name=body.name,
         frequency_per_week=body.frequency_per_week,
+        notes=body.notes,
+        schedule_days=body.schedule_days,
     )
     db.add(prog)
     db.flush()

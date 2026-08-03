@@ -44,6 +44,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "apiBase": "http://localhost:8000/v1",
+      "clientId": "1"
     }
   }
 }

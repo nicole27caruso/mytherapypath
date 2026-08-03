@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { templates } from '@/lib/mock-data'
+import { useApp } from '@/lib/app-context'
 import { X } from 'lucide-react'
 
 const CLIENT_COLORS = [
@@ -23,7 +23,9 @@ export type NewClient = {
   name: string
   initials: string
   age: number
+  dob?: string | null
   condition: string
+  diagnosis?: string | null
   program: string
   frequency: number
   completedThisWeek: number
@@ -32,6 +34,8 @@ export type NewClient = {
   lastActivity: string
   color: string
   templateId?: string
+  createdAt?: string
+  programCreatedAt?: string
 }
 
 interface NewClientModalProps {
@@ -45,27 +49,70 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
   const [name, setName] = useState('')
   const [age, setAge] = useState('')
   const [condition, setCondition] = useState('')
+  const [diagnosis, setDiagnosis] = useState('')
+  const [dob, setDob] = useState('')
   const [program, setProgram] = useState('')
   const [nextSession, setNextSession] = useState('')
   const [frequency, setFrequency] = useState('3')
   const [status, setStatus] = useState<'active' | 'inactive'>('active')
   const [templateId, setTemplateId] = useState<string>('')
   const [saved, setSaved] = useState(false)
+  const { programTemplates } = useApp()
+
+  // Calculate age from DOB and keep age field readonly for users
+  function calculateAgeFromDob(dobStr: string) {
+    if (!dobStr) return ''
+    try {
+      const dobDate = new Date(dobStr)
+      if (isNaN(dobDate.getTime())) return ''
+      const now = new Date()
+      let years = now.getFullYear() - dobDate.getFullYear()
+      const m = now.getMonth() - dobDate.getMonth()
+      if (m < 0 || (m === 0 && now.getDate() < dobDate.getDate())) years--
+      return String(Math.max(0, years))
+    } catch (e) {
+      return ''
+    }
+  }
+
+  // Keep age in sync when DOB changes
+  useEffect(() => {
+    const a = calculateAgeFromDob(dob)
+    setAge(a)
+  }, [dob])
+
+  function isDobInFuture(dobStr: string) {
+    if (!dobStr) return false
+    try {
+      const d = new Date(dobStr)
+      const now = new Date()
+      // compare date parts only
+      return d.setHours(0,0,0,0) > now.setHours(0,0,0,0)
+    } catch (e) {
+      return false
+    }
+  }
+
+  const dobInvalid = isDobInFuture(dob)
 
   function getInitials(fullName: string) {
     return fullName.trim().split(/\s+/).map(w => w[0]?.toUpperCase() ?? '').join('').slice(0, 2)
   }
 
-  function handleTemplateChange(id: string) {
+  function handleTemplateChange(id: string | null) {
+    if (id === null) {
+      setTemplateId('')
+      return
+    }
     setTemplateId(id)
     if (id === 'none') {
       setTemplateId('')
       return
     }
-    const t = templates.find(t => t.id === id)
+    const t = programTemplates.find(t => t.id === id)
     if (t) {
-      if (!program.trim()) setProgram(t.name)
-      setFrequency(String(t.frequency))
+      if (!program.trim()) setProgram(t.title)
+      setFrequency(String(t.frequency_per_week ?? 3))
     }
   }
 
@@ -83,18 +130,23 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
   }
 
   function handleSave() {
+    // compute age from dob as a fallback (dob is required)
+    const computedAge = calculateAgeFromDob(dob)
     const newClient: NewClient = {
       id: `client-${Date.now()}`,
       name: name.trim(),
       initials: getInitials(name),
-      age: parseInt(age) || 0,
+      age: computedAge ? parseInt(computedAge, 10) : 0,
+      dob: dob || undefined,
       condition: condition.trim(),
-      program: program.trim() || (templateId ? templates.find(t => t.id === templateId)?.name ?? 'Program not yet assigned' : 'Program not yet assigned'),
+      diagnosis: diagnosis.trim() || undefined,
+      program: program.trim() || (templateId ? programTemplates.find(t => t.id === templateId)?.title ?? 'Program not yet assigned' : 'Program not yet assigned'),
       frequency: parseInt(frequency) || 3,
       completedThisWeek: 0,
       nextSession: nextSession || '—',
       status,
       lastActivity: new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString(),
       color: CLIENT_COLORS[existingCount % CLIENT_COLORS.length],
       templateId: templateId || undefined,
     }
@@ -103,8 +155,8 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
     setTimeout(() => handleClose(), 1200)
   }
 
-  const canSave = name.trim() && age.trim() && condition.trim()
-  const selectedTemplate = templates.find(t => t.id === templateId)
+  const canSave = !!(name.trim() && dob.trim() && condition.trim() && !dobInvalid)
+  const selectedTemplate = programTemplates.find(t => t.id === templateId)
 
   if (!open) return null
 
@@ -137,32 +189,44 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Age <span className="text-red-400">*</span></label>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Date of Birth <span className="text-red-400">*</span></label>
                 <Input
-                  type="number"
-                  min={1}
-                  max={120}
-                  placeholder="e.g. 8"
-                  value={age}
-                  onChange={e => setAge(e.target.value)}
+                  type="date"
+                  value={dob}
+                  onChange={e => setDob(e.target.value)}
+                  className={dobInvalid ? 'border-destructive' : ''}
                 />
+                <p className="text-xs text-slate-400 mt-1">Age will be calculated from DOB</p>
+                {dobInvalid && (
+                  <p className="text-xs text-red-500 mt-1">Date of birth must be in the past</p>
+                )}
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Status</label>
-                <div className="flex rounded-lg border overflow-hidden h-10">
-                  <button
-                    onClick={() => setStatus('active')}
-                    className={`flex-1 text-sm font-medium transition-colors ${status === 'active' ? 'bg-emerald-500 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                  >
-                    Active
-                  </button>
-                  <button
-                    onClick={() => setStatus('inactive')}
-                    className={`flex-1 text-sm font-medium transition-colors border-l ${status === 'inactive' ? 'bg-slate-400 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                  >
-                    Inactive
-                  </button>
-                </div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">Age</label>
+                <Input
+                  type="text"
+                  value={age}
+                  readOnly
+                  className="text-center"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1.5">Status</label>
+              <div className="flex rounded-lg border overflow-hidden h-10">
+                <button
+                  onClick={() => setStatus('active')}
+                  className={`flex-1 text-sm font-medium transition-colors ${status === 'active' ? 'bg-emerald-500 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  Active
+                </button>
+                <button
+                  onClick={() => setStatus('inactive')}
+                  className={`flex-1 text-sm font-medium transition-colors border-l ${status === 'inactive' ? 'bg-slate-400 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  Inactive
+                </button>
               </div>
             </div>
 
@@ -185,9 +249,9 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No template — start blank</SelectItem>
-                  {templates.map(t => (
+                  {programTemplates.map(t => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.name} ({t.frequency}x/week)
+                      {t.title} ({t.frequency_per_week ?? 3}x/week)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -195,7 +259,7 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
               {selectedTemplate && (
                 <div className="mt-2 px-3 py-2 bg-teal-50 rounded-lg border border-teal-100">
                   <p className="text-xs text-teal-700 font-medium mb-1">{selectedTemplate.exercises.length} exercises included:</p>
-                  <p className="text-xs text-teal-600">{selectedTemplate.exercises.join(' · ')}</p>
+                  <p className="text-xs text-teal-600">{selectedTemplate.exercises.map(ex => ex.template.title).join(' · ')}</p>
                 </div>
               )}
             </div>

@@ -46,6 +46,32 @@ export interface Program {
   createdAt: string;
 }
 
+export interface ProgramTemplateExercise {
+  id: string;
+  order: number;
+  exerciseId: string;
+}
+
+export interface ProgramTemplate {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  bodyRegion?: string;
+  injuryType?: string;
+  functionalFocus?: string;
+  recoveryPhase?: string;
+  goals?: string;
+  ergonomicRecommendations?: string;
+  precautions?: string;
+  equipmentNeeded?: string;
+  progressionCriteria?: string;
+  frequencyPerWeek?: number;
+  scheduleDays?: string;
+  createdAt: string;
+  exercises: ProgramTemplateExercise[];
+}
+
 export interface WeeklyProgress {
   clientId: string;
   weekStart: string;

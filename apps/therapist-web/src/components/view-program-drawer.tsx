@@ -120,9 +120,9 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   const completion = Math.round((client.completedThisWeek / displayFrequency) * 100)
 
   function enterEdit() {
-    const source = programOverride?.exercises ?? program.exercises.map(e => ({ name: e.name, videoUrl: '', instructions: e.instructions, duration: e.duration }))
+    const source = programOverride?.exercises ?? program?.exercises.map(e => ({ name: e.name, videoUrl: '', instructions: e.instructions, duration: e.duration })) ?? []
     setEditExercises(source.map(ae => {
-      const detail = program.exercises.find(pe => pe.name === ae.name)
+      const detail = program?.exercises.find(pe => pe.name === ae.name)
       return {
         name: ae.name,
         videoUrl: ae.videoUrl ?? '',

@@ -98,16 +98,56 @@ def get_dashboard(client_id: str, db: Session = Depends(get_db)):
             exercises.append({
                 "id": pe.template.id,
                 "title": pe.template.title,
+                "description": pe.template.description,
+                "instructions": pe.template.instructions,
+                "video_url": pe.template.video_url,
+                "category": pe.template.category,
                 "duration_minutes": pe.template.duration_minutes,
             })
+
+    latest_submissions = {}
+    for sub in (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id)
+        .order_by(desc(models.Submission.submitted_at))
+        .all()
+    ):
+        if sub.exercise_name not in latest_submissions:
+            latest_submissions[sub.exercise_name] = sub
+
+    submitted_exercises = [
+        {
+            "exercise_name": sub.exercise_name,
+            "status": sub.status,
+            "media_type": sub.media_type,
+            "media_url": sub.media_url,
+            "submitted_at": _fmt_date(sub.submitted_at),
+        }
+        for sub in latest_submissions.values()
+    ]
 
     return {
         "client": {
             "name": client.name.split()[0],
             "full_name": client.name,
             "age": client.age,
+            "dob": _fmt_date(client.dob) if hasattr(client, 'dob') and client.dob else None,
+            "condition": client.condition,
+            "diagnosis": client.diagnosis,
+            "frequency": client.frequency,
+            "completed_this_week": client.completed_this_week,
+            "next_session": client.next_session,
+            "stars_total": (client.completed_this_week or 0) * 5,
+            "program": {
+                "name": program.name if program else None,
+                "frequency_per_week": program.frequency_per_week if program else None,
+                "schedule_days": program.schedule_days if program else None,
+                "created_at": _fmt_date(program.created_at) if program and program.created_at else None,
+            },
+            "program_started": _fmt_date(program.created_at) if program and program.created_at else None,
         },
         "exercises": exercises,
+        "submitted_exercises": submitted_exercises,
         "messages": messages,
     }
 

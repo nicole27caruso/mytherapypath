@@ -34,6 +34,17 @@ EXERCISES = {
     "Ball Squeeze Series": {"instructions": "Squeeze therapy ball with increasing resistance, 3 sets of 15 reps.", "duration": 10},
     "Passive ROM":         {"instructions": "Passive range-of-motion for shoulder and elbow — caregiver assisted.", "duration": 15},
     "Wrist Rotation":      {"instructions": "Slow controlled wrist rotations, 3 sets of 10 reps each direction.", "duration": 10},
+    "Median Nerve Glide":  {"instructions": "Perform median nerve gliding motions through wrist flexion and extension while keeping the thumb relaxed.", "duration": 8},
+    "Wrist Neutral Hold":  {"instructions": "Hold the wrist in a neutral position for 30 seconds, focusing on relaxed fingers and thumb.", "duration": 5},
+    "Thumb Opposition Practice": {"instructions": "Oppose the thumb to each fingertip slowly, repeating 10 times on each hand.", "duration": 6},
+    "Grip Pinch Progression": {"instructions": "Squeeze small objects with a precise pinch grip, gradually increasing size and resistance.", "duration": 8},
+    "Scapular Retraction": {"instructions": "Pull shoulder blades gently together and down, holding for 5 seconds. Repeat 10 times.", "duration": 6},
+    "Pendulum Circles":    {"instructions": "Lean forward, allow the arm to hang, and gently move it in small circular motions.", "duration": 7},
+    "Gentle Shoulder ER":   {"instructions": "Perform gentle external rotation with the elbow at the side using a light band.", "duration": 7},
+    "Wrist Extension Stretch": {"instructions": "Extend the wrist gently with the opposite hand, feeling a mild stretch along the forearm.", "duration": 5},
+    "Pelvic Tilts":        {"instructions": "Lie on your back with knees bent and tilt the pelvis to flatten the low back against the floor.", "duration": 6},
+    "Bridge Hold":         {"instructions": "Lift hips slowly into a bridge and hold for 10 seconds, focusing on glute activation.", "duration": 8},
+    "Sit-to-Stand Practice": {"instructions": "Practice controlled sit-to-stand transitions with feet hip-width apart.", "duration": 7},
     "Sensory Bin Activity":{"instructions": "Explore rice, dried beans, or kinetic sand with hands; hide and find objects.", "duration": 8},
     "Tactile Cards":       {"instructions": "Match textures by touch without looking (soft, rough, bumpy, smooth).", "duration": 7},
     "Weighted Lap Pad":    {"instructions": "Calming deep pressure using weighted lap pad — seated at table.", "duration": 5},
@@ -57,14 +68,90 @@ for name, meta in EXERCISES.items():
 
 print(f"  {len(template_map)} exercise templates")
 
+# ── Program Templates ───────────────────────────────────────────────────────────
+
+PROGRAM_TEMPLATES = {
+    "Workstation Wrist Recovery": {
+        "description": "Program focused on nerve glides, wrist neutral support, and gradual grip progression for desk workers.",
+        "category": "Upper extremity",
+        "body_region": "Wrist / Hand",
+        "injury_type": "Carpal Tunnel Syndrome",
+        "functional_focus": "Nerve mobility, wrist control, grip strength",
+        "recovery_phase": "Subacute",
+        "goals": "Improve median nerve gliding, reduce wrist strain during keyboard use, and restore pinch function.",
+        "ergonomic_recommendations": "Keep keyboard and mouse at elbow height, use a wrist-support brace in neutral alignment, and schedule frequent microbreaks.",
+        "precautions": "Avoid sustained wrist flexion or forceful gripping during symptom flare-ups.",
+        "equipment_needed": "Theraband, wrist splint, small therapy ball",
+        "progression_criteria": "Patient reports reduced numbness and can hold neutral wrist position for 30 seconds without pain.",
+        "frequency": 4,
+        "exercises": ["Median Nerve Glide", "Wrist Neutral Hold", "Thumb Opposition Practice", "Grip Pinch Progression"],
+    },
+    "Shoulder Mobility and Scapular Control": {
+        "description": "Structured progression for shoulder impingement and overhead work recovery.",
+        "category": "Shoulder",
+        "body_region": "Shoulder",
+        "injury_type": "Rotator Cuff Tendinopathy",
+        "functional_focus": "Scapular stability, overhead range, pain-free movement",
+        "recovery_phase": "Subacute",
+        "goals": "Restore pain-free shoulder range of motion and build scapular control for functional lifting.",
+        "ergonomic_recommendations": "Avoid repeated overhead reaching, use step stools when needed, and alternate tasks to reduce shoulder strain.",
+        "precautions": "Stop if sharp shoulder pain increases and avoid heavy lifting with the affected arm.",
+        "equipment_needed": "Light resistance band",
+        "progression_criteria": "Improved overhead reach with minimal discomfort and ability to hold scapular retraction for 10 seconds.",
+        "frequency": 4,
+        "exercises": ["Pendulum Circles", "Scapular Retraction", "Gentle Shoulder ER"],
+    },
+    "Post-Surgical Radius Rehab": {
+        "description": "Early wrist recovery program emphasizing edema control, gentle motion, and grip reactivation.",
+        "category": "Wrist / Hand",
+        "body_region": "Wrist / Hand",
+        "injury_type": "Distal Radius Fracture",
+        "functional_focus": "Edema control, protected wrist ROM, grip strength",
+        "recovery_phase": "Remodeling",
+        "goals": "Recover safe wrist motion while managing pain and swelling, then progress to functional grip tasks.",
+        "ergonomic_recommendations": "Use built-up handles and padded grips, avoid heavy lifting or pinching during early healing.",
+        "precautions": "Respect surgeon-prescribed motion limits and avoid forceful wrist extension.",
+        "equipment_needed": "Therapy putty, lightweight grip trainer",
+        "progression_criteria": "Able to tolerate gentle wrist motion and perform controlled grip exercises without increased swelling.",
+        "frequency": 4,
+        "exercises": ["Wrist Rotation", "Wrist Extension Stretch", "Grip Pinch Progression"],
+    },
+}
+
+template_library_map = {}
+for title, meta in PROGRAM_TEMPLATES.items():
+    p = models.ProgramTemplate(
+        title=title,
+        description=meta["description"],
+        category=meta.get("category"),
+        body_region=meta.get("body_region"),
+        injury_type=meta.get("injury_type"),
+        functional_focus=meta.get("functional_focus"),
+        recovery_phase=meta.get("recovery_phase"),
+        goals=meta.get("goals"),
+        ergonomic_recommendations=meta.get("ergonomic_recommendations"),
+        precautions=meta.get("precautions"),
+        equipment_needed=meta.get("equipment_needed"),
+        progression_criteria=meta.get("progression_criteria"),
+        frequency_per_week=meta.get("frequency", 3),
+        schedule_days=meta.get("schedule_days"),
+    )
+    db.add(p)
+    db.flush()
+    for index, exercise_name in enumerate(meta["exercises"]):
+        db.add(models.ProgramTemplateExercise(program_template_id=p.id, template_id=template_map[exercise_name], order=index))
+    template_library_map[title] = p.id
+
+print(f"  {len(template_library_map)} program templates")
+
 # ── Clients ───────────────────────────────────────────────────────────────────
 
 clients_data = [
-    {"id": "1", "name": "Emma Thompson",   "age": 8,  "condition": "Fine Motor Skills",        "color": "bg-purple-100 text-purple-700", "frequency": 3, "completed_this_week": 2, "next_session": "2026-07-01", "status": "active"},
-    {"id": "2", "name": "James Rodriguez", "age": 35, "condition": "Post-Stroke Recovery",     "color": "bg-blue-100 text-blue-700",    "frequency": 5, "completed_this_week": 4, "next_session": "2026-06-30", "status": "active"},
-    {"id": "3", "name": "Lily Chen",       "age": 6,  "condition": "Sensory Processing",       "color": "bg-pink-100 text-pink-700",    "frequency": 3, "completed_this_week": 3, "next_session": "2026-07-02", "status": "active"},
-    {"id": "4", "name": "Michael Davis",   "age": 52, "condition": "Hand Rehabilitation",      "color": "bg-gray-100 text-gray-700",    "frequency": 4, "completed_this_week": 0, "next_session": "2026-07-05", "status": "inactive"},
-    {"id": "5", "name": "Sophie Williams", "age": 10, "condition": "Coordination Development", "color": "bg-teal-100 text-teal-700",    "frequency": 2, "completed_this_week": 1, "next_session": "2026-07-03", "status": "active"},
+    {"id": "1", "name": "Emma Thompson",   "age": 8,  "dob": datetime(2018, 5, 12), "condition": "Fine Motor Skills",        "diagnosis": "Developmental fine motor delay", "color": "bg-purple-100 text-purple-700", "frequency": 3, "completed_this_week": 2, "next_session": "2026-07-01", "status": "active"},
+    {"id": "2", "name": "James Rodriguez", "age": 35, "dob": datetime(1990, 11, 3), "condition": "Post-Stroke Recovery",     "diagnosis": "Right hemispheric ischemic stroke", "color": "bg-blue-100 text-blue-700",    "frequency": 5, "completed_this_week": 4, "next_session": "2026-06-30", "status": "active"},
+    {"id": "3", "name": "Lily Chen",       "age": 6,  "dob": datetime(2019, 8, 22), "condition": "Sensory Processing",       "diagnosis": "Sensory modulation disorder", "color": "bg-pink-100 text-pink-700",    "frequency": 3, "completed_this_week": 3, "next_session": "2026-07-02", "status": "active"},
+    {"id": "4", "name": "Michael Davis",   "age": 52, "dob": datetime(1974, 3, 18), "condition": "Hand Rehabilitation",      "diagnosis": "Post-surgical distal radius rehab", "color": "bg-gray-100 text-gray-700",    "frequency": 4, "completed_this_week": 0, "next_session": "2026-07-05", "status": "inactive"},
+    {"id": "5", "name": "Sophie Williams", "age": 10, "dob": datetime(2016, 1, 9),  "condition": "Coordination Development", "diagnosis": "Bilateral coordination delay", "color": "bg-teal-100 text-teal-700",    "frequency": 2, "completed_this_week": 1, "next_session": "2026-07-03", "status": "active"},
 ]
 
 for c in clients_data:

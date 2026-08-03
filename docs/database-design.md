@@ -17,7 +17,7 @@ therapist (hardcoded ID, no table yet)
     │       ├──< therapist_notes                            │
     │       └──── programs (one per client) ──< program_exercises >── exercise_templates
     │
-    └──< exercise_templates (library of exercises)
+    └──< program_templates (reusable template library) ──< program_template_exercises >── exercise_templates
 ```
 
 ---
@@ -61,6 +61,42 @@ A shared library of reusable exercises that can be assigned to any client.
 | category | VARCHAR | nullable | e.g. "Fine Motor", "Grip Strength" |
 | duration_minutes | INTEGER | nullable | Estimated time to complete |
 | created_at | TIMESTAMP | default now() | Record creation time |
+
+---
+
+### `program_templates`
+Reusable therapist-facing program templates that group exercises and capture clinical context.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | UUID | PK, auto-generated | Unique identifier |
+| title | VARCHAR | NOT NULL | Template display name |
+| description | TEXT | nullable | High-level summary of the program |
+| category | VARCHAR | nullable | Broad category like "Upper extremity" |
+| body_region | VARCHAR | nullable | Affected region, e.g. "Wrist / Hand" |
+| injury_type | VARCHAR | nullable | Diagnosis or injury type |
+| functional_focus | VARCHAR | nullable | Targeted impairment focus |
+| recovery_phase | VARCHAR | nullable | Phase of care, e.g. "Subacute" |
+| goals | TEXT | nullable | Therapist-facing goals for the plan |
+| ergonomic_recommendations | TEXT | nullable | Workplace or task ergonomic guidance |
+| precautions | TEXT | nullable | Contraindications and flags |
+| equipment_needed | TEXT | nullable | Suggested equipment |
+| progression_criteria | TEXT | nullable | How to know when to advance |
+| frequency_per_week | INTEGER | nullable | Recommended weekly frequency |
+| schedule_days | VARCHAR | nullable | Recommended day abbreviations |
+| created_at | TIMESTAMP | default now() | Record creation time |
+
+---
+
+### `program_template_exercises`
+Links program templates to ordered exercise templates.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | UUID | PK, auto-generated | Unique identifier |
+| program_template_id | UUID | FK → program_templates.id | Program template reference |
+| template_id | UUID | FK → exercise_templates.id | Exercise template reference |
+| order | INTEGER | nullable | Order in the template exercise list |
 
 ---
 

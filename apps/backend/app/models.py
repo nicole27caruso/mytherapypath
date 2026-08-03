@@ -17,7 +17,9 @@ class Client(Base):
     therapist_id    = Column(String, nullable=False, index=True)
     name            = Column(String(200), nullable=False)
     age             = Column(Integer)
+    dob             = Column(Date, nullable=True)
     condition       = Column(String(200))
+    diagnosis       = Column(String(200))
     status          = Column(String(20), nullable=False, default="active")  # active | inactive
     color           = Column(String(80))                                    # tailwind bg class
     frequency       = Column(Integer, default=3)                            # sessions per week
@@ -52,6 +54,8 @@ class Program(Base):
     client_id           = Column(String, ForeignKey("clients.id"), nullable=False, unique=True)
     name                = Column(String(200))
     frequency_per_week  = Column(Integer, default=3)
+    notes               = Column(Text)
+    schedule_days       = Column(String(100))                               # comma-separated day abbreviations, e.g. "Mon,Wed,Fri"
     created_at          = Column(DateTime, default=datetime.utcnow)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -69,6 +73,46 @@ class ProgramExercise(Base):
 
     program  = relationship("Program", back_populates="exercises")
     template = relationship("ExerciseTemplate", back_populates="program_exercises")
+
+
+class ProgramTemplate(Base):
+    __tablename__ = "program_templates"
+
+    id                         = Column(String, primary_key=True, default=new_uuid)
+    title                      = Column(String(200), nullable=False)
+    description                = Column(Text)
+    category                   = Column(String(100))
+    body_region                = Column(String(100))
+    injury_type                = Column(String(100))
+    functional_focus           = Column(String(200))
+    recovery_phase             = Column(String(100))
+    goals                      = Column(Text)
+    ergonomic_recommendations  = Column(Text)
+    precautions                = Column(Text)
+    equipment_needed           = Column(Text)
+    progression_criteria       = Column(Text)
+    frequency_per_week         = Column(Integer, default=3)
+    schedule_days              = Column(String(100))
+    created_at                 = Column(DateTime, default=datetime.utcnow)
+
+    exercises = relationship(
+        "ProgramTemplateExercise",
+        back_populates="program_template",
+        cascade="all, delete-orphan",
+        order_by="ProgramTemplateExercise.order",
+    )
+
+
+class ProgramTemplateExercise(Base):
+    __tablename__ = "program_template_exercises"
+
+    id                  = Column(String, primary_key=True, default=new_uuid)
+    program_template_id = Column(String, ForeignKey("program_templates.id"), nullable=False)
+    template_id         = Column(String, ForeignKey("exercise_templates.id"), nullable=False)
+    order               = Column(Integer, default=0)
+
+    program_template = relationship("ProgramTemplate", back_populates="exercises")
+    template         = relationship("ExerciseTemplate")
 
 
 class Submission(Base):

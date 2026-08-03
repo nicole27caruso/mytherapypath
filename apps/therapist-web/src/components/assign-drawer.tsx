@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { clients, templates } from '@/lib/mock-data'
+import { useApp } from '@/lib/app-context'
 import { X, Plus, Minus, Video } from 'lucide-react'
 
 type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string }
@@ -14,22 +14,52 @@ interface AssignDrawerProps {
   onClose: () => void
   preselectedClientId?: string
   preselectedTemplateId?: string
-  onAssign?: (clientId: string, exercises: ExerciseEntry[], frequency: number) => void
+  existingExercises?: ExerciseEntry[]
+  existingFrequency?: number
+  existingNotes?: string
+  onAssign?: (clientId: string, exercises: ExerciseEntry[], frequency: number, notes: string) => void
 }
 
-export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTemplateId, onAssign }: AssignDrawerProps) {
-  const preTemplate = templates.find(t => t.id === preselectedTemplateId)
-  const preClient = clients.find(c => c.id === preselectedClientId)
+export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTemplateId, existingExercises, existingFrequency, existingNotes, onAssign }: AssignDrawerProps) {
+  const { clientList, programTemplates } = useApp()
+  const preTemplate = programTemplates.find(t => t.id === preselectedTemplateId)
+  const preClient = clientList.find(c => c.id === preselectedClientId)
 
   const [clientId, setClientId] = useState(preselectedClientId ?? '')
-  const [exercises, setExercises] = useState<ExerciseEntry[]>(
-    preTemplate?.exercises.map(name => ({ name, videoUrl: '', instructions: '', duration: '' })) ?? []
-  )
+  const initialExercises = existingExercises ?? preTemplate?.exercises.map(pe => ({
+    name: pe.template.title,
+    videoUrl: pe.template.video_url ?? '',
+    instructions: pe.template.instructions ?? '',
+    duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
+  })) ?? []
+  const [exercises, setExercises] = useState<ExerciseEntry[]>(initialExercises)
   const [newExercise, setNewExercise] = useState('')
-  const [frequency, setFrequency] = useState(preTemplate?.frequency ?? 3)
-  const [notes, setNotes] = useState('')
+  const [frequency, setFrequency] = useState(existingFrequency ?? preTemplate?.frequency_per_week ?? 3)
+  const [notes, setNotes] = useState(existingNotes ?? '')
+  const [templateId, setTemplateId] = useState(preselectedTemplateId ?? '')
   const [saved, setSaved] = useState(false)
   const [videoExpanded, setVideoExpanded] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    // Defer setting state to avoid synchronous setState in effect (prevents cascading renders)
+    const id = setTimeout(() => {
+      setClientId(preselectedClientId ?? '')
+      setTemplateId(preselectedTemplateId ?? '')
+      if (preselectedTemplateId) {
+        const selected = programTemplates.find(t => t.id === preselectedTemplateId)
+        if (selected) {
+          setExercises(selected.exercises.map(pe => ({
+            name: pe.template.title,
+            videoUrl: pe.template.video_url ?? '',
+            instructions: pe.template.instructions ?? '',
+            duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
+          })))
+          setFrequency(selected.frequency_per_week ?? 3)
+        }
+      }
+    }, 0)
+    return () => clearTimeout(id)
+  }, [preselectedClientId, preselectedTemplateId, programTemplates])
 
   function addExercise() {
     if (newExercise.trim()) {
@@ -54,7 +84,8 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTe
   function toggleVideo(i: number) {
     setVideoExpanded(prev => {
       const next = new Set(prev)
-      next.has(i) ? next.delete(i) : next.add(i)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
       return next
     })
   }
@@ -66,7 +97,7 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTe
       : exercises
     if (pending) setNewExercise('')
     const resolvedClientId = preselectedClientId || clientId
-    if (resolvedClientId) onAssign?.(resolvedClientId, finalExercises, frequency)
+    if (resolvedClientId) onAssign?.(resolvedClientId, finalExercises, frequency, notes)
     setSaved(true)
     setTimeout(() => {
       setSaved(false)
@@ -108,12 +139,12 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTe
                 </div>
               </div>
             ) : (
-              <Select value={clientId} onValueChange={setClientId}>
+              <Select value={clientId} onValueChange={value => setClientId(value ?? '')}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a client..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {clients.filter(c => c.status === 'active').map(c => (
+                  {clientList.filter(c => c.status === 'active').map(c => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name} — {c.condition}
                     </SelectItem>
@@ -121,6 +152,38 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTe
                 </SelectContent>
               </Select>
             )}
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-slate-700 block mb-2">Starting Template</label>
+            <Select value={templateId || 'none'} onValueChange={value => {
+              const selectedId = value === 'none' ? '' : value ?? ''
+              setTemplateId(selectedId)
+              if (selectedId) {
+                const template = programTemplates.find(t => t.id === selectedId)
+                if (template) {
+                  setExercises(template.exercises.map(pe => ({
+                    name: pe.template.title,
+                    videoUrl: pe.template.video_url ?? '',
+                    instructions: pe.template.instructions ?? '',
+                    duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
+                  })))
+                  setFrequency(template.frequency_per_week ?? 3)
+                }
+              }
+            }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a program template" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No template — enter exercises manually</SelectItem>
+                {programTemplates.map(t => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.title} — {t.body_region ?? t.category ?? 'Program'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>

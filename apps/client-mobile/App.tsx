@@ -1,9 +1,26 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type ComponentType } from 'react'
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Platform, Animated, Image, Alert, ActivityIndicator,
+  View as RNView,
+  Text as RNText,
+  ScrollView as RNScrollView,
+  TouchableOpacity as RNTouchableOpacity,
+  StyleSheet,
+  Platform,
+  Animated,
+  Image as RNImage,
+  Alert,
+  ActivityIndicator as RNActivityIndicator,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
+import Constants from 'expo-constants'
+
+const View = RNView as unknown as ComponentType<any>
+const Text = RNText as unknown as ComponentType<any>
+const ScrollView = RNScrollView as unknown as ComponentType<any>
+const TouchableOpacity = RNTouchableOpacity as unknown as ComponentType<any>
+const Image = RNImage as unknown as ComponentType<any>
+const ActivityIndicator = RNActivityIndicator as unknown as ComponentType<any>
+const AnimatedView = Animated.View as unknown as ComponentType<any>
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import * as Notifications from 'expo-notifications'
@@ -14,29 +31,41 @@ if (Platform.OS !== 'web') {
       shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
     }),
   })
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
-const API_BASE = 'http://localhost:8000/v1'
-const CLIENT_ID = '1'
+const appConfig = Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {}
+const API_BASE = String(appConfig.apiBase ?? 'http://localhost:8000/v1')
+const CLIENT_ID = String(appConfig.clientId ?? '1')
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ClientInfo = { name: string; fullName: string; age: number; starsTotal: number }
-
+type ClientInfo = {
+ name: string
+ fullName: string
+ age: number
+ starsTotal: number
+ completedThisWeek: number
+ frequency: number
+ nextSession?: string | null
+}
+ 
 type Exercise = {
-  id: string
-  name: string
-  category: string
-  duration: string
-  difficulty: string
-  color: string
-  bgColor: string
-  instructions: string[]
-  tip: string
+ id: string
+ name: string
+ category: string
+ duration: string
+ difficulty: string
+ color: string
+ bgColor: string
+ instructions: string[]
+ tip: string
+ videoUrl?: string
 }
 
 type Tab = 'home' | 'progress' | 'messages'
@@ -128,20 +157,36 @@ const EXERCISE_DETAILS: Record<string, ExerciseDetails> = {
   },
 }
 
-function toExercise(apiEx: { id: string; title: string; duration_minutes: number | null }, index: number): Exercise {
+function parseInstructions(raw?: string | null) {
+  if (!raw) return []
+  return raw
+    .split(/\r?\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+}
+
+function toExercise(apiEx: {
+  id: string
+  title: string
+  description?: string | null
+  instructions?: string | null
+  video_url?: string | null
+  category?: string | null
+  duration_minutes?: number | null
+}, index: number): Exercise {
   const details = EXERCISE_DETAILS[apiEx.title]
+  const parsedInstructions = parseInstructions(apiEx.instructions ?? details?.instructions.join('\n'))
   return {
     id: apiEx.id,
     name: apiEx.title,
-    ...(details ?? {
-      category: 'Exercise',
-      duration: `${apiEx.duration_minutes ?? 5} min`,
-      difficulty: 'Medium',
-      color: '#6366F1',
-      bgColor: '#EEF2FF',
-      instructions: [],
-      tip: 'Do your best and take breaks when needed!',
-    }),
+    category: apiEx.category ?? details?.category ?? 'Exercise',
+    duration: apiEx.duration_minutes != null ? `${apiEx.duration_minutes} min` : details?.duration ?? '5 min',
+    difficulty: details?.difficulty ?? 'Medium',
+    color: details?.color ?? '#6366F1',
+    bgColor: details?.bgColor ?? '#EEF2FF',
+    instructions: parsedInstructions,
+    tip: details?.tip ?? 'Follow the therapist’s instructions and take breaks when needed!',
+    videoUrl: apiEx.video_url ?? undefined,
   }
 }
 
@@ -155,10 +200,7 @@ const ACHIEVEMENTS = [
 ]
 
 const WEEKLY_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const ALREADY_DONE_DAYS = new Set(['Mon', 'Tue', 'Wed'])
-
 // ─── Camera helper ────────────────────────────────────────────────────────────
-
 async function openCameraHelper(
   mediaType: 'photo' | 'video',
   onCapture: (media: CapturedMedia) => void,
@@ -192,7 +234,6 @@ function HomeScreen({
   completed,
   capturedMedia,
   resubmitted,
-  onToggle,
   onExercise,
   onRevise,
 }: {
@@ -202,7 +243,6 @@ function HomeScreen({
   completed: Set<string>
   capturedMedia: Record<string, CapturedMedia>
   resubmitted: Set<string>
-  onToggle: (id: string) => void
   onExercise: (ex: Exercise) => void
   onRevise: (rejection: RejectionItem) => void
 }) {
@@ -234,28 +274,16 @@ function HomeScreen({
     }
   }, [done])
 
-  function handleToggle(id: string) {
-    const becomingDone = !completed.has(id)
-    if (becomingDone) {
-      const anim = getBounceAnim(id)
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1.4, duration: 120, useNativeDriver: true }),
-        Animated.spring(anim, { toValue: 1, friction: 4, useNativeDriver: true }),
-      ]).start()
-    }
-    onToggle(id)
-  }
-
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.screenContent} showsVerticalScrollIndicator={false}>
       <View style={s.homeHeader}>
         <View>
-          <Text style={s.greeting}>Hi {clientInfo.name}! 👋</Text>
-          <Text style={s.subGreeting}>Monday, June 29</Text>
+          <Text style={s.greeting}>Hi {clientInfo.name || 'there'}! 👋</Text>
+          <Text style={s.subGreeting}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
         </View>
         <View style={s.starBadge}>
           <Text style={s.starEmoji}>⭐</Text>
-          <Text style={s.starCount}>{clientInfo.starsTotal + done * 5}</Text>
+          <Text style={s.starCount}>{clientInfo.starsTotal}</Text>
         </View>
       </View>
 
@@ -268,9 +296,9 @@ function HomeScreen({
           <View style={[s.progressFill, { width: `${pct}%` as any }]} />
         </View>
         {done === total && total > 0 && (
-          <Animated.View style={{ transform: [{ scale: celebAnim }] }}>
+          <AnimatedView style={{ transform: [{ scale: celebAnim }] }}>
             <Text style={s.allDone}>🎉 Amazing! You finished all exercises today!</Text>
-          </Animated.View>
+          </AnimatedView>
         )}
       </View>
 
@@ -301,11 +329,11 @@ function HomeScreen({
         const bounceAnim = getBounceAnim(ex.id)
         return (
           <View key={ex.id} style={[s.exerciseCard, isDone && s.exerciseCardDone]}>
-            <Animated.View
+            <AnimatedView
               style={[s.exerciseDot, { backgroundColor: ex.color, transform: [{ scale: bounceAnim }] }]}
             >
               <Text style={s.exerciseDotText}>{isDone ? '✓' : String(index + 1)}</Text>
-            </Animated.View>
+            </AnimatedView>
 
             <View style={s.exerciseInfo}>
               <Text style={[s.exerciseName, isDone && s.doneText]}>{ex.name}</Text>
@@ -323,16 +351,8 @@ function HomeScreen({
             </View>
 
             <View style={s.exerciseActions}>
-              <TouchableOpacity style={s.watchBtn} onPress={() => onExercise(ex)}>
-                <Text style={s.watchBtnText}>▶ Watch</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.doneBtn, isDone && s.doneBtnActive]}
-                onPress={() => handleToggle(ex.id)}
-              >
-                <Text style={[s.doneBtnText, isDone && s.doneBtnActiveText]}>
-                  {isDone ? '✓ Done' : 'Mark Done'}
-                </Text>
+              <TouchableOpacity style={[s.openBtn, isDone && s.openBtnDone]} onPress={() => onExercise(ex)}>
+                <Text style={[s.openBtnText, isDone && s.openBtnDoneText]}>Open</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -384,7 +404,7 @@ function ExerciseScreen({
 
       <View style={[s.videoBox, { backgroundColor: exercise.color }]}>
         <Text style={s.videoIcon}>▶</Text>
-        <Text style={s.videoLabel}>Tap to play video</Text>
+        <Text style={s.videoLabel}>{exercise.videoUrl ? 'Watch tutorial video' : 'Tap to play video'}</Text>
         <View style={s.videoBadge}>
           <Text style={s.videoBadgeText}>{exercise.duration}</Text>
         </View>
@@ -454,11 +474,11 @@ function ExerciseScreen({
               </TouchableOpacity>
             </View>
           ) : (
-            <Animated.View style={[s.successBox, { backgroundColor: exercise.bgColor,
+            <AnimatedView style={[s.successBox, { backgroundColor: exercise.bgColor,
               transform: [{ scale: submitAnim }] }]}
             >
               <Text style={s.successText}>🌟 Submitted! Dr. Kim will review it soon.</Text>
-            </Animated.View>
+            </AnimatedView>
           )}
         </View>
       ) : (
@@ -561,9 +581,9 @@ function RevisionScreen({
       <Text style={s.uploadSub}>Show Dr. Kim your improvement!</Text>
 
       {submitted ? (
-        <Animated.View style={[s.successBox, { backgroundColor: '#ECFDF5', transform: [{ scale: submitAnim }] }]}>
+        <AnimatedView style={[s.successBox, { backgroundColor: '#ECFDF5', transform: [{ scale: submitAnim }] }]}> 
           <Text style={s.successText}>✅ Revised submission sent! Dr. Kim will review it.</Text>
-        </Animated.View>
+        </AnimatedView>
       ) : preview ? (
         <View>
           {preview.mediaType === 'photo' && preview.uri ? (
@@ -615,23 +635,31 @@ function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; cli
   const todayDayIndex = new Date().getDay()
   const todayLabel = WEEKLY_DAYS[todayDayIndex === 0 ? 6 : todayDayIndex - 1]
   const todayHasActivity = completed.size > 0
+  const weeklyTarget = clientInfo.frequency || 3
+  const completedThisWeek = clientInfo.completedThisWeek
+  const weeklyPct = weeklyTarget > 0 ? Math.round((completedThisWeek / weeklyTarget) * 100) : 0
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.screenContent} showsVerticalScrollIndicator={false}>
       <Text style={s.progTitle}>Your Progress ⭐</Text>
-      <Text style={s.progSub}>Keep up the great work, {clientInfo.name}!</Text>
+      <Text style={s.progSub}>Keep up the great work, {clientInfo.name || 'there'}!</Text>
 
       <View style={s.starCard}>
         <Text style={s.bigStar}>⭐</Text>
-        <Text style={s.bigStarCount}>{clientInfo.starsTotal + completed.size * 5}</Text>
+        <Text style={s.bigStarCount}>{clientInfo.starsTotal}</Text>
         <Text style={s.bigStarLabel}>Total Stars Earned</Text>
         <Text style={s.bigStarSub}>You earn 5 stars for every completed exercise!</Text>
+      </View>
+
+      <View style={s.weekSummary}>
+        <Text style={s.weekSummaryTitle}>This week</Text>
+        <Text style={s.weekSummaryText}>{completedThisWeek}/{weeklyTarget} exercises completed</Text>
       </View>
 
       <Text style={s.sectionTitle}>This Week</Text>
       <View style={s.weekRow}>
         {WEEKLY_DAYS.map(day => {
-          const isDone = ALREADY_DONE_DAYS.has(day) || (day === todayLabel && todayHasActivity)
+          const isDone = day === todayLabel && todayHasActivity
           return (
             <View key={day} style={s.dayCol}>
               <View style={[s.dayCircle, isDone ? s.dayDone : s.dayMissed]}>
@@ -645,7 +673,12 @@ function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; cli
 
       <Text style={s.sectionTitle}>Achievements</Text>
       <View style={s.achGrid}>
-        {ACHIEVEMENTS.map(a => (
+        {[
+          { id: '1', name: '3-Day Streak', emoji: '🔥', earned: completedThisWeek >= 3 },
+          { id: '2', name: 'Perfect Week', emoji: '⭐', earned: completedThisWeek >= weeklyTarget },
+          { id: '3', name: 'Proof Uploaded', emoji: '📸', earned: completed.size > 0 },
+          { id: '4', name: 'On the Move', emoji: '💪', earned: completedThisWeek > 0 },
+        ].map(a => (
           <View key={a.id} style={[s.achCard, !a.earned && s.achLocked]}>
             <Text style={s.achEmoji}>{a.emoji}</Text>
             <Text style={[s.achName, !a.earned && s.achNameLocked]}>{a.name}</Text>
@@ -809,41 +842,64 @@ export default function App() {
   const [resubmitted, setResubmitted] = useState<Set<string>>(new Set())
 
   const [clientInfo, setClientInfo] = useState<ClientInfo>({
-    name: 'Emma', fullName: 'Emma Thompson', age: 8, starsTotal: 24,
+    name: '', fullName: '', age: 0, starsTotal: 0,
+    completedThisWeek: 0,
+    frequency: 3,
+    nextSession: null,
   })
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [messages, setMessages] = useState<MessageItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    async function loadDashboard() {
-      try {
-        const res = await fetch(`${API_BASE}/mobile/${CLIENT_ID}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
+  async function loadDashboard() {
+    try {
+      const res = await fetch(`${API_BASE}/mobile/${CLIENT_ID}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
 
-        setClientInfo({
-          name: data.client.name,
-          fullName: data.client.full_name,
-          age: data.client.age ?? 0,
-          starsTotal: 24,
-        })
-        setExercises(data.exercises.map((e: any, i: number) => toExercise(e, i)))
-        setMessages(data.messages as MessageItem[])
+      const loadedExercises: Exercise[] = data.exercises.map((e: any, i: number) => toExercise(e, i))
+      const submittedNames = new Set<string>(
+        (data.submitted_exercises ?? []).map((item: any) => item.exercise_name)
+      )
 
-        // Pre-populate resubmitted set from server data
-        const alreadyRevised = new Set<string>(
-          (data.messages as MessageItem[])
-            .filter((m): m is RejectionItem => m.kind === 'rejected' && !!m.has_revision)
-            .map(m => m.id)
+      setClientInfo({
+        name: data.client.name,
+        fullName: data.client.full_name,
+        age: data.client.age ?? 0,
+        starsTotal: data.client.stars_total ?? 0,
+        completedThisWeek: data.client.completed_this_week ?? 0,
+        frequency: data.client.frequency ?? 3,
+        nextSession: data.client.next_session ?? null,
+      })
+      setExercises(loadedExercises)
+      setMessages(data.messages as MessageItem[])
+      setCompleted(new Set(loadedExercises.filter(ex => submittedNames.has(ex.name)).map(ex => ex.id)))
+      setCapturedMedia(
+        Object.fromEntries(
+          loadedExercises
+            .filter(ex => submittedNames.has(ex.name))
+            .map(ex => [ex.id, {
+              uri: '',
+              mediaType: (data.submitted_exercises.find((item: any) => item.exercise_name === ex.name)?.media_type as 'photo' | 'video') ?? 'photo',
+            }])
         )
-        setResubmitted(alreadyRevised)
-      } catch (err) {
-        console.error('Failed to load from API — using defaults:', err)
-      } finally {
-        setIsLoading(false)
-      }
+      )
+
+      // Pre-populate resubmitted set from server data
+      const alreadyRevised = new Set<string>(
+        (data.messages as MessageItem[])
+          .filter((m): m is RejectionItem => m.kind === 'rejected' && !!m.has_revision)
+          .map(m => m.id)
+      )
+      setResubmitted(alreadyRevised)
+    } catch (err) {
+      console.error('Failed to load from API — using defaults:', err)
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  useEffect(() => {
     loadDashboard()
     scheduleReminder()
   }, [])
@@ -866,33 +922,30 @@ export default function App() {
     }
   }
 
-  function handleToggle(id: string) {
-    setCompleted(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
   async function handleCapture(exerciseId: string, media: CapturedMedia) {
     setCapturedMedia(prev => ({ ...prev, [exerciseId]: media }))
     const ex = exercises.find(e => e.id === exerciseId)
     if (!ex) return
     try {
-      await fetch(`${API_BASE}/mobile/${CLIENT_ID}/submit`, {
+      const res = await fetch(`${API_BASE}/mobile/${CLIENT_ID}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ exercise_name: ex.name, media_type: media.mediaType }),
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setCompleted(prev => new Set(prev).add(exerciseId))
+      await loadDashboard()
     } catch (err) {
       console.error('Failed to record submission:', err)
     }
   }
 
-  function handleTabChange(tab: Tab) {
+  async function handleTabChange(tab: Tab) {
     setActiveTab(tab)
-    if (tab !== 'home') setSelectedEx(null)
+    setSelectedEx(null)
     setSelectedRevision(null)
+    setIsLoading(true)
+    await loadDashboard()
   }
 
   function handleRevise(rejection: RejectionItem) {
@@ -906,7 +959,7 @@ export default function App() {
       (m): m is RejectionItem => m.kind === 'rejected' && m.id === rejectionId
     )
     try {
-      await fetch(`${API_BASE}/mobile/submissions/${rejectionId}/resubmit`, {
+      const res = await fetch(`${API_BASE}/mobile/submissions/${rejectionId}/resubmit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -914,6 +967,8 @@ export default function App() {
           media_type: 'video',
         }),
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await loadDashboard()
     } catch (err) {
       console.error('Failed to record resubmission:', err)
     }
@@ -964,7 +1019,6 @@ export default function App() {
               completed={completed}
               capturedMedia={capturedMedia}
               resubmitted={resubmitted}
-              onToggle={handleToggle}
               onExercise={ex => setSelectedEx(ex)}
               onRevise={handleRevise}
             />
@@ -1078,12 +1132,10 @@ const s = StyleSheet.create({
   proofBadge: { backgroundColor: '#D1FAE5', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
   proofBadgeText: { fontSize: 11, fontWeight: '600', color: '#059669' },
   exerciseActions: { gap: 6, alignItems: 'flex-end' },
-  watchBtn: { backgroundColor: PURPLE_LIGHT, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
-  watchBtnText: { color: PURPLE, fontSize: 12, fontWeight: '600' },
-  doneBtn: { borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
-  doneBtnActive: { backgroundColor: '#059669', borderColor: '#059669' },
-  doneBtnText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
-  doneBtnActiveText: { color: '#fff' },
+  openBtn: { backgroundColor: PURPLE_LIGHT, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  openBtnDone: { backgroundColor: '#D1FAE5' },
+  openBtnText: { color: PURPLE, fontSize: 12, fontWeight: '700' },
+  openBtnDoneText: { color: '#059669' },
   encourageBox: {
     backgroundColor: '#EFF6FF', borderRadius: 16, padding: 14,
     flexDirection: 'row', gap: 10, marginTop: 8,
@@ -1168,6 +1220,18 @@ const s = StyleSheet.create({
   bigStarCount: { fontSize: 52, fontWeight: '700', color: '#fff' },
   bigStarLabel: { fontSize: 16, color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginTop: 4 },
   bigStarSub: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 6, textAlign: 'center' },
+  weekSummary: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  weekSummaryTitle: { fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 4 },
+  weekSummaryText: { fontSize: 15, color: '#475569' },
   weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
   dayCol: { alignItems: 'center', gap: 6 },
   dayCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
