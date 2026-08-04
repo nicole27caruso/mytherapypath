@@ -10,6 +10,8 @@ import {
   Image as RNImage,
   Alert,
   ActivityIndicator as RNActivityIndicator,
+  TextInput as RNTextInput,
+  KeyboardAvoidingView as RNKeyboardAvoidingView,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import Constants from 'expo-constants'
@@ -20,10 +22,13 @@ const ScrollView = RNScrollView as unknown as ComponentType<any>
 const TouchableOpacity = RNTouchableOpacity as unknown as ComponentType<any>
 const Image = RNImage as unknown as ComponentType<any>
 const ActivityIndicator = RNActivityIndicator as unknown as ComponentType<any>
+const TextInput = RNTextInput as unknown as ComponentType<any>
+const KeyboardAvoidingView = RNKeyboardAvoidingView as unknown as ComponentType<any>
 const AnimatedView = Animated.View as unknown as ComponentType<any>
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import * as Notifications from 'expo-notifications'
+import * as SecureStore from 'expo-secure-store'
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
@@ -41,7 +46,32 @@ if (Platform.OS !== 'web') {
 
 const appConfig = Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {}
 const API_BASE = String(appConfig.apiBase ?? 'http://localhost:8000/v1')
-const CLIENT_ID = String(appConfig.clientId ?? '1')
+
+// ─── Session storage ────────────────────────────────────────────────────────────
+// expo-secure-store isn't available on web, so fall back to localStorage there.
+
+const TOKEN_KEY = 'mtp_client_token'
+
+async function getStoredToken(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    try { return window.localStorage.getItem(TOKEN_KEY) } catch { return null }
+  }
+  return SecureStore.getItemAsync(TOKEN_KEY)
+}
+
+async function setStoredToken(token: string | null): Promise<void> {
+  if (Platform.OS === 'web') {
+    try {
+      if (token) window.localStorage.setItem(TOKEN_KEY, token)
+      else window.localStorage.removeItem(TOKEN_KEY)
+    } catch {
+      // localStorage unavailable (e.g. private browsing) — session just won't persist
+    }
+    return
+  }
+  if (token) await SecureStore.setItemAsync(TOKEN_KEY, token)
+  else await SecureStore.deleteItemAsync(TOKEN_KEY)
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,8 +81,10 @@ type ClientInfo = {
  age: number
  starsTotal: number
  completedThisWeek: number
+ weekActivity: string[]
  frequency: number
  nextSession?: string | null
+ therapistName: string
 }
  
 type Exercise = {
@@ -248,7 +280,7 @@ function HomeScreen({
   messages,
   clientInfo,
   completed,
-  capturedMedia,
+  submissionStatus,
   resubmitted,
   onExercise,
   onRevise,
@@ -257,7 +289,7 @@ function HomeScreen({
   messages: MessageItem[]
   clientInfo: ClientInfo
   completed: Set<string>
-  capturedMedia: Record<string, CapturedMedia>
+  submissionStatus: Record<string, 'pending' | 'approved' | 'rejected'>
   resubmitted: Set<string>
   onExercise: (ex: Exercise) => void
   onRevise: (rejection: RejectionItem) => void
@@ -341,7 +373,7 @@ function HomeScreen({
 
       {exercises.map((ex, index) => {
         const isDone = completed.has(ex.id)
-        const hasProof = !!capturedMedia[ex.id]
+        const status = submissionStatus[ex.id]
         const bounceAnim = getBounceAnim(ex.id)
         return (
           <View key={ex.id} style={[s.exerciseCard, isDone && s.exerciseCardDone]}>
@@ -358,9 +390,19 @@ function HomeScreen({
                 <View style={[s.diffBadge, { backgroundColor: ex.bgColor }]}>
                   <Text style={[s.diffText, { color: ex.color }]}>{ex.difficulty}</Text>
                 </View>
-                {hasProof && (
+                {status === 'approved' && (
                   <View style={s.proofBadge}>
-                    <Text style={s.proofBadgeText}>📎 Proof uploaded</Text>
+                    <Text style={s.proofBadgeText}>✅ Approved</Text>
+                  </View>
+                )}
+                {status === 'pending' && (
+                  <View style={s.pendingBadge}>
+                    <Text style={s.pendingBadgeText}>⏳ Pending review</Text>
+                  </View>
+                )}
+                {status === 'rejected' && (
+                  <View style={s.revisionBadge}>
+                    <Text style={s.revisionBadgeText}>↩ Needs revision</Text>
                   </View>
                 )}
               </View>
@@ -378,7 +420,7 @@ function HomeScreen({
       <View style={s.encourageBox}>
         <Text style={s.encourageEmoji}>💬</Text>
         <Text style={s.encourageMsg}>
-          "You're doing great, {clientInfo.name}! Dr. Kim says keep up the awesome work!"
+          "You're doing great, {clientInfo.name}! {clientInfo.therapistName || 'Your therapist'} says keep up the awesome work!"
         </Text>
       </View>
     </ScrollView>
@@ -390,14 +432,25 @@ function HomeScreen({
 function ExerciseScreen({
   exercise,
   existingCapture,
+  status,
+  rejection,
+  approvedNote,
+  therapistName,
   onCapture,
+  onRevise,
   onBack,
 }: {
   exercise: Exercise
   existingCapture: CapturedMedia | null
+  status?: 'pending' | 'approved' | 'rejected'
+  rejection?: RejectionItem | null
+  approvedNote?: string
+  therapistName: string
   onCapture: (exerciseId: string, media: CapturedMedia) => void
+  onRevise: (rejection: RejectionItem) => void
   onBack: () => void
 }) {
+  const therapist = therapistName || 'your therapist'
   const [preview, setPreview] = useState<CapturedMedia | null>(existingCapture)
   const [submitted, setSubmitted] = useState(!!existingCapture)
   const submitAnim = useRef(new Animated.Value(submitted ? 1 : 0)).current
@@ -455,12 +508,12 @@ function ExerciseScreen({
       )}
 
       <View style={[s.tipBox, { backgroundColor: exercise.bgColor, borderColor: exercise.color }]}>
-        <Text style={s.tipTitle}>💡 Tip from Dr. Kim</Text>
+        <Text style={s.tipTitle}>💡 Tip from {therapist}</Text>
         <Text style={[s.tipText, { color: exercise.color }]}>{exercise.tip}</Text>
       </View>
 
       <Text style={s.uploadTitle}>Upload Your Proof</Text>
-      <Text style={s.uploadSub}>Show Dr. Kim how well you did!</Text>
+      <Text style={s.uploadSub}>Show {therapist} how well you did!</Text>
 
       {preview ? (
         <View>
@@ -486,14 +539,27 @@ function ExerciseScreen({
                 style={[s.submitBtn, { backgroundColor: exercise.color }]}
                 onPress={handleSubmit}
               >
-                <Text style={s.submitBtnText}>Submit to Dr. Kim ✓</Text>
+                <Text style={s.submitBtnText}>Submit to {therapist} ✓</Text>
+              </TouchableOpacity>
+            </View>
+          ) : status === 'approved' ? (
+            <AnimatedView style={[s.successBox, { backgroundColor: GREEN_LIGHT, transform: [{ scale: submitAnim }] }]}>
+              <Text style={s.successText}>✅ Approved by {therapist}!</Text>
+              {approvedNote ? <Text style={s.successNote}>{approvedNote}</Text> : null}
+            </AnimatedView>
+          ) : status === 'rejected' && rejection ? (
+            <View style={s.rejNoticeBox}>
+              <Text style={s.rejNoticeTitle}>✕ Revision requested by {therapist}</Text>
+              <Text style={s.rejNoticeText}>{rejection.rejection_note}</Text>
+              <TouchableOpacity style={[s.reviseNowBtn, { backgroundColor: RED }]} onPress={() => onRevise(rejection)}>
+                <Text style={s.submitBtnText}>Revise Now</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <AnimatedView style={[s.successBox, { backgroundColor: exercise.bgColor,
               transform: [{ scale: submitAnim }] }]}
             >
-              <Text style={s.successText}>🌟 Submitted! Dr. Kim will review it soon.</Text>
+              <Text style={s.successText}>🌟 Submitted! {therapist} will review it soon.</Text>
             </AnimatedView>
           )}
         </View>
@@ -524,14 +590,17 @@ function ExerciseScreen({
 function RevisionScreen({
   rejection,
   exercises,
+  therapistName,
   onSubmit,
   onBack,
 }: {
   rejection: RejectionItem
   exercises: Exercise[]
+  therapistName: string
   onSubmit: (id: string, media: CapturedMedia) => void
   onBack: () => void
 }) {
+  const therapist = therapistName || 'your therapist'
   const exercise = exercises.find(e => e.name === rejection.exercise_name)
   const color = exercise?.color ?? '#6366F1'
   const bgColor = exercise?.bgColor ?? '#EEF2FF'
@@ -557,7 +626,7 @@ function RevisionScreen({
       </TouchableOpacity>
 
       <View style={s.rejNoticeBox}>
-        <Text style={s.rejNoticeTitle}>✕ Submission Returned by Dr. Kim</Text>
+        <Text style={s.rejNoticeTitle}>✕ Submission Returned by {therapist}</Text>
         <Text style={s.rejNoticeText}>{rejection.rejection_note}</Text>
         <Text style={s.rejNoticeDate}>Returned on {rejection.date}</Text>
       </View>
@@ -587,18 +656,18 @@ function RevisionScreen({
           ))}
 
           <View style={[s.tipBox, { backgroundColor: bgColor, borderColor: color }]}>
-            <Text style={s.tipTitle}>💡 Tip from Dr. Kim</Text>
+            <Text style={s.tipTitle}>💡 Tip from {therapist}</Text>
             <Text style={[s.tipText, { color }]}>{exercise.tip}</Text>
           </View>
         </>
       )}
 
       <Text style={s.uploadTitle}>Record Revised Submission</Text>
-      <Text style={s.uploadSub}>Show Dr. Kim your improvement!</Text>
+      <Text style={s.uploadSub}>Show {therapist} your improvement!</Text>
 
       {submitted ? (
         <AnimatedView style={[s.successBox, { backgroundColor: '#ECFDF5', transform: [{ scale: submitAnim }] }]}> 
-          <Text style={s.successText}>✅ Revised submission sent! Dr. Kim will review it.</Text>
+          <Text style={s.successText}>✅ Revised submission sent! {therapist} will review it.</Text>
         </AnimatedView>
       ) : preview ? (
         <View>
@@ -650,7 +719,6 @@ function RevisionScreen({
 function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; clientInfo: ClientInfo }) {
   const todayDayIndex = new Date().getDay()
   const todayLabel = WEEKLY_DAYS[todayDayIndex === 0 ? 6 : todayDayIndex - 1]
-  const todayHasActivity = completed.size > 0
   const weeklyTarget = clientInfo.frequency || 3
   const completedThisWeek = clientInfo.completedThisWeek
   const weeklyPct = weeklyTarget > 0 ? Math.round((completedThisWeek / weeklyTarget) * 100) : 0
@@ -675,7 +743,7 @@ function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; cli
       <Text style={s.sectionTitle}>This Week</Text>
       <View style={s.weekRow}>
         {WEEKLY_DAYS.map(day => {
-          const isDone = day === todayLabel && todayHasActivity
+          const isDone = clientInfo.weekActivity.includes(day)
           return (
             <View key={day} style={s.dayCol}>
               <View style={[s.dayCircle, isDone ? s.dayDone : s.dayMissed]}>
@@ -711,23 +779,25 @@ function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; cli
 function MessagesScreen({
   messages,
   resubmitted,
+  therapistName,
   onRevise,
 }: {
   messages: MessageItem[]
   resubmitted: Set<string>
+  therapistName: string
   onRevise: (rejection: RejectionItem) => void
 }) {
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.screenContent} showsVerticalScrollIndicator={false}>
       <Text style={s.progTitle}>Messages 💬</Text>
-      <Text style={s.progSub}>Notes and feedback from Dr. Kim</Text>
+      <Text style={s.progSub}>Notes and feedback from {therapistName || 'your therapist'}</Text>
 
       {messages.map(msg => {
         if (msg.kind === 'note') {
           return (
             <View key={msg.id} style={s.msgNote}>
               <View style={s.msgHeader}>
-                <Text style={s.msgFrom}>Dr. Kim</Text>
+                <Text style={s.msgFrom}>{therapistName || 'Your therapist'}</Text>
                 <Text style={s.msgDate}>{msg.date}</Text>
               </View>
               <Text style={s.msgNoteText}>"{msg.text}"</Text>
@@ -836,47 +906,119 @@ function TabBar({
 
 // ─── App Header ───────────────────────────────────────────────────────────────
 
-function AppHeader({ clientInfo }: { clientInfo: ClientInfo }) {
+function AppHeader({ clientInfo, onLogout }: { clientInfo: ClientInfo; onLogout: () => void }) {
   const insets = useSafeAreaInsets()
   return (
     <View style={[s.header, { paddingTop: insets.top + 12 }]}>
-      <Text style={s.headerTitle}>MyTherapyPath</Text>
-      <Text style={s.headerSub}>{clientInfo.fullName}</Text>
+      <View>
+        <Text style={s.headerTitle}>MyTherapyPath</Text>
+        <Text style={s.headerSub}>{clientInfo.fullName}</Text>
+      </View>
+      <TouchableOpacity style={s.logoutBtn} onPress={onLogout}>
+        <Text style={s.logoutBtnText}>Log out</Text>
+      </TouchableOpacity>
     </View>
+  )
+}
+
+// ─── Login Screen ─────────────────────────────────────────────────────────────
+
+function LoginScreen({
+  onLogin,
+  loading,
+  error,
+}: {
+  onLogin: (accessCode: string) => void
+  loading: boolean
+  error: string | null
+}) {
+  const [accessCode, setAccessCode] = useState('')
+  const insets = useSafeAreaInsets()
+
+  return (
+    <KeyboardAvoidingView
+      style={[s.loginScreen, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <Text style={s.loginEmoji}>⭐</Text>
+      <Text style={s.loginTitle}>MyTherapyPath</Text>
+      <Text style={s.loginSub}>Enter the access code your therapist gave you</Text>
+
+      <TextInput
+        style={s.loginInput}
+        placeholder="Access Code"
+        placeholderTextColor="#94A3B8"
+        value={accessCode}
+        onChangeText={setAccessCode}
+        autoCapitalize="characters"
+        autoCorrect={false}
+        editable={!loading}
+      />
+
+      {error ? <Text style={s.loginError}>{error}</Text> : null}
+
+      <TouchableOpacity
+        style={[s.loginBtn, (!accessCode.trim() || loading) && s.loginBtnDisabled]}
+        onPress={() => onLogin(accessCode.trim())}
+        disabled={!accessCode.trim() || loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={s.loginBtnText}>Log In</Text>
+        )}
+      </TouchableOpacity>
+    </KeyboardAvoidingView>
   )
 }
 
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [token, setToken] = useState<string | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
+  const [loggingIn, setLoggingIn] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
+
   const [activeTab, setActiveTab] = useState<Tab>('home')
   const [selectedEx, setSelectedEx] = useState<Exercise | null>(null)
   const [selectedRevision, setSelectedRevision] = useState<RejectionItem | null>(null)
 
   const [completed, setCompleted] = useState<Set<string>>(new Set())
   const [capturedMedia, setCapturedMedia] = useState<Record<string, CapturedMedia>>({})
+  const [submissionStatus, setSubmissionStatus] = useState<Record<string, 'pending' | 'approved' | 'rejected'>>({})
   const [resubmitted, setResubmitted] = useState<Set<string>>(new Set())
 
   const [clientInfo, setClientInfo] = useState<ClientInfo>({
     name: '', fullName: '', age: 0, starsTotal: 0,
     completedThisWeek: 0,
+    weekActivity: [],
     frequency: 3,
     nextSession: null,
+    therapistName: '',
   })
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [messages, setMessages] = useState<MessageItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   async function loadDashboard() {
+    if (!token) return
     try {
-      const res = await fetch(`${API_BASE}/mobile/${CLIENT_ID}`)
+      const res = await fetch(`${API_BASE}/mobile/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.status === 401) {
+        await handleLogout()
+        return
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
 
       const loadedExercises: Exercise[] = data.exercises.map((e: any, i: number) => toExercise(e, i))
-      const submittedNames = new Set<string>(
-        (data.submitted_exercises ?? []).map((item: any) => item.exercise_name)
+      const submissionByName = new Map<string, any>(
+        (data.submitted_exercises ?? []).map((item: any) => [item.exercise_name, item])
       )
+      const submittedExercises = loadedExercises.filter(ex => submissionByName.has(ex.name))
 
       setClientInfo({
         name: data.client.name,
@@ -884,23 +1026,34 @@ export default function App() {
         age: data.client.age ?? 0,
         starsTotal: data.client.stars_total ?? 0,
         completedThisWeek: data.client.completed_this_week ?? 0,
+        weekActivity: data.client.week_activity ?? [],
         frequency: data.client.frequency ?? 3,
         nextSession: data.client.next_session ?? null,
+        therapistName: data.client.therapist_name ?? '',
       })
       setExercises(loadedExercises)
       setMessages(data.messages as MessageItem[])
-      setCompleted(new Set(loadedExercises.filter(ex => submittedNames.has(ex.name)).map(ex => ex.id)))
+      // "Completed" means proof was submitted and hasn't been rejected —
+      // a rejected exercise falls back into "needs attention" until revised.
+      setCompleted(new Set(
+        submittedExercises
+          .filter(ex => submissionByName.get(ex.name)?.status !== 'rejected')
+          .map(ex => ex.id)
+      ))
       setCapturedMedia(
         Object.fromEntries(
-          loadedExercises
-            .filter(ex => submittedNames.has(ex.name))
-            .map(ex => {
-              const submission = data.submitted_exercises.find((item: any) => item.exercise_name === ex.name)
-              return [ex.id, {
-                uri: submission?.media_url ?? '',
-                mediaType: (submission?.media_type as 'photo' | 'video') ?? 'photo',
-              }]
-            })
+          submittedExercises.map(ex => {
+            const submission = submissionByName.get(ex.name)
+            return [ex.id, {
+              uri: submission?.media_url ?? '',
+              mediaType: (submission?.media_type as 'photo' | 'video') ?? 'photo',
+            }]
+          })
+        )
+      )
+      setSubmissionStatus(
+        Object.fromEntries(
+          submittedExercises.map(ex => [ex.id, submissionByName.get(ex.name)?.status as 'pending' | 'approved' | 'rejected'])
         )
       )
 
@@ -915,13 +1068,83 @@ export default function App() {
       console.error('Failed to load from API — using defaults:', err)
     } finally {
       setIsLoading(false)
+      setAuthChecked(true)
+    }
+  }
+
+  async function handleLogin(accessCode: string) {
+    setLoginError(null)
+    setLoggingIn(true)
+    try {
+      const res = await fetch(`${API_BASE}/mobile/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_code: accessCode }),
+      })
+      if (!res.ok) {
+        setLoginError("That access code wasn't recognized. Please check with your therapist and try again.")
+        return
+      }
+      const data = await res.json()
+      await setStoredToken(data.token)
+      setToken(data.token)
+    } catch (err) {
+      console.error('Login failed:', err)
+      setLoginError('Could not reach the server. Please check your connection and try again.')
+    } finally {
+      setLoggingIn(false)
+    }
+  }
+
+  async function handleLogout() {
+    const activeToken = token
+    setToken(null)
+    setAuthChecked(true)
+    setIsLoading(false)
+    await setStoredToken(null)
+
+    // Reset client-scoped state so a different login never sees stale data.
+    setClientInfo({ name: '', fullName: '', age: 0, starsTotal: 0, completedThisWeek: 0, weekActivity: [], frequency: 3, nextSession: null, therapistName: '' })
+    setExercises([])
+    setMessages([])
+    setCompleted(new Set())
+    setCapturedMedia({})
+    setSubmissionStatus({})
+    setResubmitted(new Set())
+    setActiveTab('home')
+    setSelectedEx(null)
+    setSelectedRevision(null)
+
+    if (activeToken) {
+      try {
+        await fetch(`${API_BASE}/mobile/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${activeToken}` },
+        })
+      } catch {
+        // best-effort — the local token is already cleared either way
+      }
     }
   }
 
   useEffect(() => {
+    (async () => {
+      const stored = await getStoredToken()
+      if (stored) {
+        setToken(stored)
+      } else {
+        setAuthChecked(true)
+        setIsLoading(false)
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (!token) return
+    setIsLoading(true)
     loadDashboard()
     scheduleReminder()
-  }, [])
+  }, [token])
 
   async function scheduleReminder() {
     if (Platform.OS === 'web') return
@@ -932,7 +1155,7 @@ export default function App() {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: `Time for exercises, ${clientInfo.name}! ⭐`,
-          body: "Dr. Kim has exercises waiting. Let's go!",
+          body: `${clientInfo.therapistName || 'Your therapist'} has exercises waiting. Let's go!`,
         },
         trigger: { hour: 16, minute: 0, repeats: true } as any,
       })
@@ -944,12 +1167,14 @@ export default function App() {
   async function handleCapture(exerciseId: string, media: CapturedMedia) {
     setCapturedMedia(prev => ({ ...prev, [exerciseId]: media }))
     const ex = exercises.find(e => e.id === exerciseId)
-    if (!ex) return
+    if (!ex || !token) return
     try {
-      const res = await fetch(`${API_BASE}/mobile/${CLIENT_ID}/submit`, {
+      const res = await fetch(`${API_BASE}/mobile/me/submit`, {
         method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
         body: buildSubmissionForm(ex.name, media),
       })
+      if (res.status === 401) return handleLogout()
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setCompleted(prev => new Set(prev).add(exerciseId))
       await loadDashboard()
@@ -976,11 +1201,14 @@ export default function App() {
     const rejection = messages.find(
       (m): m is RejectionItem => m.kind === 'rejected' && m.id === rejectionId
     )
+    if (!token) return
     try {
       const res = await fetch(`${API_BASE}/mobile/submissions/${rejectionId}/resubmit`, {
         method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
         body: buildSubmissionForm(rejection?.exercise_name ?? '', media),
       })
+      if (res.status === 401) return handleLogout()
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       await loadDashboard()
     } catch (err) {
@@ -993,7 +1221,21 @@ export default function App() {
       m.kind === 'rejected' && !resubmitted.has(m.id) && !m.has_revision
   ).length
 
-  if (isLoading) {
+  const selectedExRejection = selectedEx
+    ? messages.find(
+        (m): m is RejectionItem =>
+          m.kind === 'rejected' && m.exercise_name === selectedEx.name && !resubmitted.has(m.id) && !m.has_revision
+      ) ?? null
+    : null
+
+  const selectedExApprovedNote = selectedEx
+    ? messages.find(
+        (m): m is Extract<MessageItem, { kind: 'approved' }> =>
+          m.kind === 'approved' && m.exercise_name === selectedEx.name
+      )?.therapist_note
+    : undefined
+
+  if (!authChecked || (token && isLoading)) {
     return (
       <SafeAreaProvider>
         <View style={s.loadingScreen}>
@@ -1004,17 +1246,26 @@ export default function App() {
     )
   }
 
+  if (!token) {
+    return (
+      <SafeAreaProvider>
+        <LoginScreen onLogin={handleLogin} loading={loggingIn} error={loginError} />
+      </SafeAreaProvider>
+    )
+  }
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
       <View style={s.root}>
-        <AppHeader clientInfo={clientInfo} />
+        <AppHeader clientInfo={clientInfo} onLogout={handleLogout} />
 
         <View style={s.body}>
           {selectedRevision ? (
             <RevisionScreen
               rejection={selectedRevision}
               exercises={exercises}
+              therapistName={clientInfo.therapistName}
               onSubmit={handleRevisionSubmit}
               onBack={() => setSelectedRevision(null)}
             />
@@ -1022,7 +1273,12 @@ export default function App() {
             <ExerciseScreen
               exercise={selectedEx}
               existingCapture={capturedMedia[selectedEx.id] ?? null}
+              status={submissionStatus[selectedEx.id]}
+              rejection={selectedExRejection}
+              approvedNote={selectedExApprovedNote}
+              therapistName={clientInfo.therapistName}
               onCapture={handleCapture}
+              onRevise={handleRevise}
               onBack={() => setSelectedEx(null)}
             />
           ) : activeTab === 'home' ? (
@@ -1031,7 +1287,7 @@ export default function App() {
               messages={messages}
               clientInfo={clientInfo}
               completed={completed}
-              capturedMedia={capturedMedia}
+              submissionStatus={submissionStatus}
               resubmitted={resubmitted}
               onExercise={ex => setSelectedEx(ex)}
               onRevise={handleRevise}
@@ -1039,7 +1295,7 @@ export default function App() {
           ) : activeTab === 'progress' ? (
             <ProgressScreen completed={completed} clientInfo={clientInfo} />
           ) : (
-            <MessagesScreen messages={messages} resubmitted={resubmitted} onRevise={handleRevise} />
+            <MessagesScreen messages={messages} resubmitted={resubmitted} therapistName={clientInfo.therapistName} onRevise={handleRevise} />
           )}
         </View>
 
@@ -1057,6 +1313,8 @@ const RED = '#EF4444'
 const RED_LIGHT = '#FEF2F2'
 const GREEN = '#059669'
 const GREEN_LIGHT = '#ECFDF5'
+const AMBER = '#B45309'
+const AMBER_LIGHT = '#FEF3C7'
 
 const s = StyleSheet.create({
   root: {
@@ -1071,9 +1329,14 @@ const s = StyleSheet.create({
     backgroundColor: PURPLE,
     paddingBottom: 16,
     paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
   },
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 },
+  logoutBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)' },
+  logoutBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
   body: { flex: 1 },
   screen: { flex: 1, backgroundColor: '#F8FAFC' },
@@ -1081,6 +1344,27 @@ const s = StyleSheet.create({
 
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   loadingText: { fontSize: 15, color: '#64748B' },
+
+  // Login
+  loginScreen: {
+    flex: 1, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  loginEmoji: { fontSize: 48, marginBottom: 8 },
+  loginTitle: { fontSize: 24, fontWeight: '700', color: '#1E293B', marginBottom: 6 },
+  loginSub: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 28 },
+  loginInput: {
+    width: '100%', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, textAlign: 'center',
+    letterSpacing: 1, color: '#1E293B', backgroundColor: '#fff', marginBottom: 12,
+  },
+  loginError: { color: RED, fontSize: 13, textAlign: 'center', marginBottom: 12 },
+  loginBtn: {
+    width: '100%', backgroundColor: PURPLE, borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  loginBtnDisabled: { opacity: 0.5 },
+  loginBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
   // Home
   homeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -1144,7 +1428,11 @@ const s = StyleSheet.create({
   diffBadge: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
   diffText: { fontSize: 11, fontWeight: '600' },
   proofBadge: { backgroundColor: '#D1FAE5', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
-  proofBadgeText: { fontSize: 11, fontWeight: '600', color: '#059669' },
+  proofBadgeText: { fontSize: 11, fontWeight: '600', color: GREEN },
+  pendingBadge: { backgroundColor: AMBER_LIGHT, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
+  pendingBadgeText: { fontSize: 11, fontWeight: '600', color: AMBER },
+  revisionBadge: { backgroundColor: RED_LIGHT, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
+  revisionBadgeText: { fontSize: 11, fontWeight: '600', color: RED },
   exerciseActions: { gap: 6, alignItems: 'flex-end' },
   openBtn: { backgroundColor: PURPLE_LIGHT, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 },
   openBtnDone: { backgroundColor: '#D1FAE5' },
@@ -1210,8 +1498,10 @@ const s = StyleSheet.create({
   retakeBtnText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
   submitBtn: { flex: 2, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   submitBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  reviseNowBtn: { borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 12 },
   successBox: { borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
   successText: { fontSize: 14, fontWeight: '600', color: '#059669', textAlign: 'center' },
+  successNote: { fontSize: 12, color: '#065F46', textAlign: 'center', marginTop: 6, fontStyle: 'italic' },
 
   // Revision notice
   rejNoticeBox: {

@@ -19,7 +19,8 @@
         {
           "color": "#6366F1"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "ios": {
       "supportsTablet": true,
@@ -46,8 +47,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiBase": "http://localhost:8000/v1",
-      "clientId": "1"
+      "apiBase": "http://localhost:8000/v1"
     }
   }
 }

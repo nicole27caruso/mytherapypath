@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+import secrets
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 
 from app.database import get_db
 from app import models
 from app.storage import save_submission_media
+
+WEEKDAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 router = APIRouter(prefix="/mobile", tags=["mobile"])
 
@@ -19,17 +25,64 @@ def _persist_media(request: Request, file: UploadFile | None) -> str | None:
     if file is None or not file.filename:
         return None
     try:
-        media_path = save_submission_media(file)
+        media_url = save_submission_media(file)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
-    return f"{str(request.base_url).rstrip('/')}{media_path}"
+    # Blob Storage returns an already-absolute URL; local-disk fallback
+    # returns a relative /media/... path that needs this server's host.
+    if media_url.startswith("http://") or media_url.startswith("https://"):
+        return media_url
+    return f"{str(request.base_url).rstrip('/')}{media_url}"
 
 
-@router.get("/{client_id}")
-def get_dashboard(client_id: str, db: Session = Depends(get_db)):
-    client = db.query(models.Client).filter(models.Client.id == client_id).first()
+def get_current_client(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> models.Client:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization.removeprefix("Bearer ").strip()
+
+    session = db.query(models.ClientSession).filter(models.ClientSession.token == token).first()
+    if not session:
+        raise HTTPException(status_code=401, detail="Session expired or invalid — please log in again")
+
+    return session.client
+
+
+class LoginBody(BaseModel):
+    access_code: str
+
+
+@router.post("/login")
+def login(body: LoginBody, db: Session = Depends(get_db)):
+    code = body.access_code.strip().upper()
+    client = db.query(models.Client).filter(models.Client.access_code == code).first()
     if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
+        raise HTTPException(status_code=401, detail="That access code wasn't recognized")
+
+    session = models.ClientSession(client_id=client.id, token=secrets.token_hex(32))
+    db.add(session)
+    db.commit()
+
+    return {"token": session.token, "client_id": client.id, "name": client.name.split()[0]}
+
+
+@router.post("/logout", status_code=204)
+def logout(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        db.query(models.ClientSession).filter(models.ClientSession.token == token).delete()
+        db.commit()
+    return None
+
+
+@router.get("/me")
+def get_dashboard(client: models.Client = Depends(get_current_client), db: Session = Depends(get_db)):
+    client_id = client.id
 
     program = (
         db.query(models.Program)
@@ -131,6 +184,32 @@ def get_dashboard(client_id: str, db: Session = Depends(get_db)):
         for sub in latest_submissions.values()
     ]
 
+    # Real weekly/lifetime activity, computed from submissions rather than the
+    # static seeded `completed_this_week` column (which nothing ever updates).
+    now = datetime.utcnow()
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    week_subs = (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id)
+        .filter(models.Submission.submitted_at >= week_start)
+        .filter(models.Submission.status != "rejected")
+        .all()
+    )
+    completed_this_week = len({s.exercise_name for s in week_subs})
+    week_activity = sorted(
+        {s.submitted_at.strftime('%a') for s in week_subs if s.submitted_at},
+        key=lambda d: WEEKDAY_ORDER.index(d) if d in WEEKDAY_ORDER else 99,
+    )
+
+    total_completed = (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id)
+        .filter(models.Submission.status != "rejected")
+        .count()
+    )
+
+    therapist = db.query(models.Therapist).filter(models.Therapist.id == client.therapist_id).first()
+
     return {
         "client": {
             "name": client.name.split()[0],
@@ -140,9 +219,11 @@ def get_dashboard(client_id: str, db: Session = Depends(get_db)):
             "condition": client.condition,
             "diagnosis": client.diagnosis,
             "frequency": client.frequency,
-            "completed_this_week": client.completed_this_week,
+            "completed_this_week": completed_this_week,
+            "week_activity": week_activity,
             "next_session": client.next_session,
-            "stars_total": (client.completed_this_week or 0) * 5,
+            "stars_total": total_completed * 5,
+            "therapist_name": therapist.name if therapist else None,
             "program": {
                 "name": program.name if program else None,
                 "frequency_per_week": program.frequency_per_week if program else None,
@@ -157,18 +238,18 @@ def get_dashboard(client_id: str, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/{client_id}/submit", status_code=201)
+@router.post("/me/submit", status_code=201)
 def submit_exercise(
-    client_id: str,
     request: Request,
     exercise_name: str = Form(...),
     media_type: str = Form("video"),
     file: UploadFile | None = File(None),
+    client: models.Client = Depends(get_current_client),
     db: Session = Depends(get_db),
 ):
     media_url = _persist_media(request, file)
     sub = models.Submission(
-        client_id=client_id,
+        client_id=client.id,
         exercise_name=exercise_name,
         media_type=media_type,
         media_url=media_url,
@@ -187,15 +268,18 @@ def resubmit_exercise(
     exercise_name: str = Form(...),
     media_type: str = Form("video"),
     file: UploadFile | None = File(None),
+    client: models.Client = Depends(get_current_client),
     db: Session = Depends(get_db),
 ):
     original = db.query(models.Submission).filter(models.Submission.id == original_id).first()
     if not original:
         raise HTTPException(status_code=404, detail="Original submission not found")
+    if original.client_id != client.id:
+        raise HTTPException(status_code=404, detail="Original submission not found")
 
     media_url = _persist_media(request, file)
     sub = models.Submission(
-        client_id=original.client_id,
+        client_id=client.id,
         exercise_name=exercise_name or original.exercise_name,
         media_type=media_type,
         media_url=media_url,

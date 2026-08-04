@@ -10,6 +10,13 @@ def new_uuid() -> str:
     return str(uuid.uuid4())
 
 
+class Therapist(Base):
+    __tablename__ = "therapists"
+
+    id   = Column(String, primary_key=True)
+    name = Column(String(200), nullable=False)
+
+
 class Client(Base):
     __tablename__ = "clients"
 
@@ -25,11 +32,24 @@ class Client(Base):
     frequency       = Column(Integer, default=3)                            # sessions per week
     completed_this_week = Column(Integer, default=0)
     next_session    = Column(String(50))
+    access_code     = Column(String(20), unique=True, index=True)           # code the family enters in the mobile app to log in
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     submissions     = relationship("Submission", back_populates="client", cascade="all, delete-orphan")
     program         = relationship("Program", back_populates="client", uselist=False, cascade="all, delete-orphan")
     notes           = relationship("TherapistNote", back_populates="client", cascade="all, delete-orphan")
+    sessions        = relationship("ClientSession", back_populates="client", cascade="all, delete-orphan")
+
+
+class ClientSession(Base):
+    __tablename__ = "client_sessions"
+
+    id          = Column(String, primary_key=True, default=new_uuid)
+    client_id   = Column(String, ForeignKey("clients.id"), nullable=False, index=True)
+    token       = Column(String(64), unique=True, nullable=False, index=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+    client = relationship("Client", back_populates="sessions")
 
 
 class ExerciseTemplate(Base):

@@ -23,6 +23,10 @@ if db.query(models.Client).count() > 0:
 
 THERAPIST_ID = "therapist-1"
 
+db.add(models.Therapist(id=THERAPIST_ID, name="Dr. Sarah Kim"))
+db.flush()
+print("  1 therapist")
+
 # ── Exercise Templates ────────────────────────────────────────────────────────
 
 EXERCISES = {
@@ -147,11 +151,11 @@ print(f"  {len(template_library_map)} program templates")
 # ── Clients ───────────────────────────────────────────────────────────────────
 
 clients_data = [
-    {"id": "1", "name": "Emma Thompson",   "age": 8,  "dob": datetime(2018, 5, 12), "condition": "Fine Motor Skills",        "diagnosis": "Developmental fine motor delay", "color": "bg-purple-100 text-purple-700", "frequency": 3, "completed_this_week": 2, "next_session": "2026-07-01", "status": "active"},
-    {"id": "2", "name": "James Rodriguez", "age": 35, "dob": datetime(1990, 11, 3), "condition": "Post-Stroke Recovery",     "diagnosis": "Right hemispheric ischemic stroke", "color": "bg-blue-100 text-blue-700",    "frequency": 5, "completed_this_week": 4, "next_session": "2026-06-30", "status": "active"},
-    {"id": "3", "name": "Lily Chen",       "age": 6,  "dob": datetime(2019, 8, 22), "condition": "Sensory Processing",       "diagnosis": "Sensory modulation disorder", "color": "bg-pink-100 text-pink-700",    "frequency": 3, "completed_this_week": 3, "next_session": "2026-07-02", "status": "active"},
-    {"id": "4", "name": "Michael Davis",   "age": 52, "dob": datetime(1974, 3, 18), "condition": "Hand Rehabilitation",      "diagnosis": "Post-surgical distal radius rehab", "color": "bg-gray-100 text-gray-700",    "frequency": 4, "completed_this_week": 0, "next_session": "2026-07-05", "status": "inactive"},
-    {"id": "5", "name": "Sophie Williams", "age": 10, "dob": datetime(2016, 1, 9),  "condition": "Coordination Development", "diagnosis": "Bilateral coordination delay", "color": "bg-teal-100 text-teal-700",    "frequency": 2, "completed_this_week": 1, "next_session": "2026-07-03", "status": "active"},
+    {"id": "1", "name": "Emma Thompson",   "age": 8,  "dob": datetime(2018, 5, 12), "condition": "Fine Motor Skills",        "diagnosis": "Developmental fine motor delay", "color": "bg-purple-100 text-purple-700", "frequency": 3, "completed_this_week": 2, "next_session": "2026-07-01", "status": "active", "access_code": "EMMA-2201"},
+    {"id": "2", "name": "James Rodriguez", "age": 35, "dob": datetime(1990, 11, 3), "condition": "Post-Stroke Recovery",     "diagnosis": "Right hemispheric ischemic stroke", "color": "bg-blue-100 text-blue-700",    "frequency": 5, "completed_this_week": 4, "next_session": "2026-06-30", "status": "active", "access_code": "JAMES-7734"},
+    {"id": "3", "name": "Lily Chen",       "age": 6,  "dob": datetime(2019, 8, 22), "condition": "Sensory Processing",       "diagnosis": "Sensory modulation disorder", "color": "bg-pink-100 text-pink-700",    "frequency": 3, "completed_this_week": 3, "next_session": "2026-07-02", "status": "active", "access_code": "LILY-4408"},
+    {"id": "4", "name": "Michael Davis",   "age": 52, "dob": datetime(1974, 3, 18), "condition": "Hand Rehabilitation",      "diagnosis": "Post-surgical distal radius rehab", "color": "bg-gray-100 text-gray-700",    "frequency": 4, "completed_this_week": 0, "next_session": "2026-07-05", "status": "inactive", "access_code": "MICHAEL-9012"},
+    {"id": "5", "name": "Sophie Williams", "age": 10, "dob": datetime(2016, 1, 9),  "condition": "Coordination Development", "diagnosis": "Bilateral coordination delay", "color": "bg-teal-100 text-teal-700",    "frequency": 2, "completed_this_week": 1, "next_session": "2026-07-03", "status": "active", "access_code": "SOPHIE-3356"},
 ]
 
 for c in clients_data:
