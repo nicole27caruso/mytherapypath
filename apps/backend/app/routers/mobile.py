@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
-from pydantic import BaseModel
 
 from app.database import get_db
 from app import models
+from app.storage import save_submission_media
 
 router = APIRouter(prefix="/mobile", tags=["mobile"])
 
@@ -15,9 +15,14 @@ def _fmt_date(dt) -> str:
     return f"{dt.strftime('%B')} {dt.day}, {dt.year}"
 
 
-class SubmitBody(BaseModel):
-    exercise_name: str
-    media_type: str = "video"
+def _persist_media(request: Request, file: UploadFile | None) -> str | None:
+    if file is None or not file.filename:
+        return None
+    try:
+        media_path = save_submission_media(file)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    return f"{str(request.base_url).rstrip('/')}{media_path}"
 
 
 @router.get("/{client_id}")
@@ -153,29 +158,47 @@ def get_dashboard(client_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{client_id}/submit", status_code=201)
-def submit_exercise(client_id: str, body: SubmitBody, db: Session = Depends(get_db)):
+def submit_exercise(
+    client_id: str,
+    request: Request,
+    exercise_name: str = Form(...),
+    media_type: str = Form("video"),
+    file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    media_url = _persist_media(request, file)
     sub = models.Submission(
         client_id=client_id,
-        exercise_name=body.exercise_name,
-        media_type=body.media_type,
+        exercise_name=exercise_name,
+        media_type=media_type,
+        media_url=media_url,
         status="pending",
     )
     db.add(sub)
     db.commit()
     db.refresh(sub)
-    return {"id": sub.id, "status": sub.status}
+    return {"id": sub.id, "status": sub.status, "media_url": sub.media_url}
 
 
 @router.post("/submissions/{original_id}/resubmit", status_code=201)
-def resubmit_exercise(original_id: str, body: SubmitBody, db: Session = Depends(get_db)):
+def resubmit_exercise(
+    original_id: str,
+    request: Request,
+    exercise_name: str = Form(...),
+    media_type: str = Form("video"),
+    file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
     original = db.query(models.Submission).filter(models.Submission.id == original_id).first()
     if not original:
         raise HTTPException(status_code=404, detail="Original submission not found")
 
+    media_url = _persist_media(request, file)
     sub = models.Submission(
         client_id=original.client_id,
-        exercise_name=original.exercise_name,
-        media_type=body.media_type,
+        exercise_name=exercise_name or original.exercise_name,
+        media_type=media_type,
+        media_url=media_url,
         status="pending",
         revision_of_id=original_id,
         revision_number=(original.revision_number or 1) + 1,
@@ -183,4 +206,4 @@ def resubmit_exercise(original_id: str, body: SubmitBody, db: Session = Depends(
     db.add(sub)
     db.commit()
     db.refresh(sub)
-    return {"id": sub.id, "status": sub.status, "revision_number": sub.revision_number}
+    return {"id": sub.id, "status": sub.status, "revision_number": sub.revision_number, "media_url": sub.media_url}

@@ -71,6 +71,22 @@ type Exercise = {
 type Tab = 'home' | 'progress' | 'messages'
 type CapturedMedia = { uri: string; mediaType: 'photo' | 'video' }
 
+function buildSubmissionForm(exerciseName: string, media: CapturedMedia): FormData {
+  const form = new FormData()
+  form.append('exercise_name', exerciseName)
+  form.append('media_type', media.mediaType)
+  if (media.uri) {
+    const uriFilename = media.uri.split('/').pop() || ''
+    const ext = (uriFilename.includes('.') ? uriFilename.split('.').pop() : '') || (media.mediaType === 'photo' ? 'jpg' : 'mp4')
+    const name = `proof-${Date.now()}.${ext}`
+    const type = media.mediaType === 'photo'
+      ? `image/${ext === 'jpg' ? 'jpeg' : ext}`
+      : `video/${ext === 'mov' ? 'quicktime' : 'mp4'}`
+    form.append('file', { uri: media.uri, name, type } as any)
+  }
+  return form
+}
+
 type MessageItem =
   | { kind: 'note'; id: string; text: string; date: string }
   | { kind: 'approved'; id: string; exercise_name: string; therapist_note: string; date: string }
@@ -513,7 +529,7 @@ function RevisionScreen({
 }: {
   rejection: RejectionItem
   exercises: Exercise[]
-  onSubmit: (id: string) => void
+  onSubmit: (id: string, media: CapturedMedia) => void
   onBack: () => void
 }) {
   const exercise = exercises.find(e => e.name === rejection.exercise_name)
@@ -526,7 +542,7 @@ function RevisionScreen({
 
   function handleSubmit() {
     if (!preview) return
-    onSubmit(rejection.id)
+    onSubmit(rejection.id, preview)
     setSubmitted(true)
     Animated.sequence([
       Animated.timing(submitAnim, { toValue: 1.08, duration: 250, useNativeDriver: true }),
@@ -878,10 +894,13 @@ export default function App() {
         Object.fromEntries(
           loadedExercises
             .filter(ex => submittedNames.has(ex.name))
-            .map(ex => [ex.id, {
-              uri: '',
-              mediaType: (data.submitted_exercises.find((item: any) => item.exercise_name === ex.name)?.media_type as 'photo' | 'video') ?? 'photo',
-            }])
+            .map(ex => {
+              const submission = data.submitted_exercises.find((item: any) => item.exercise_name === ex.name)
+              return [ex.id, {
+                uri: submission?.media_url ?? '',
+                mediaType: (submission?.media_type as 'photo' | 'video') ?? 'photo',
+              }]
+            })
         )
       )
 
@@ -929,8 +948,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/mobile/${CLIENT_ID}/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exercise_name: ex.name, media_type: media.mediaType }),
+        body: buildSubmissionForm(ex.name, media),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setCompleted(prev => new Set(prev).add(exerciseId))
@@ -952,7 +970,7 @@ export default function App() {
     setSelectedRevision(rejection)
   }
 
-  async function handleRevisionSubmit(rejectionId: string) {
+  async function handleRevisionSubmit(rejectionId: string, media: CapturedMedia) {
     setResubmitted(prev => new Set([...prev, rejectionId]))
     setTimeout(() => setSelectedRevision(null), 1800)
     const rejection = messages.find(
@@ -961,11 +979,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/mobile/submissions/${rejectionId}/resubmit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          exercise_name: rejection?.exercise_name ?? '',
-          media_type: 'video',
-        }),
+        body: buildSubmissionForm(rejection?.exercise_name ?? '', media),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       await loadDashboard()

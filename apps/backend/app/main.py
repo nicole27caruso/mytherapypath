@@ -1,13 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 import os
 
 from app.routers import clients, submissions, templates, programs, dashboard, mobile, program_templates
+from app.storage import UPLOAD_DIR
 
 load_dotenv()
 
 app = FastAPI(title="MyTherapyPath API", version="1.0.0")
+app.mount("/media", StaticFiles(directory=str(UPLOAD_DIR)), name="media")
 
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(

@@ -22,3 +22,6 @@ npm-debug.log*
 
 # Alembic
 apps/backend/alembic/versions/*.pyc
+
+# Uploaded media
+apps/backend/uploads/
