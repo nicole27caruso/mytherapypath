@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
-import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, Minus, AlignLeft } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, Minus, AlignLeft, ListChecks } from 'lucide-react'
 
 const CLIENT_PROGRAMS: Record<string, {
   exercises: { name: string; duration: string; instructions: string }[]
@@ -83,7 +84,7 @@ interface ViewProgramDrawerProps {
 }
 
 export function ViewProgramDrawer({ open, clientId, onClose, programOverride, onSaveProgram }: ViewProgramDrawerProps) {
-  const { clientList, submissionList } = useApp()
+  const { clientList, submissionList, programTemplates } = useApp()
   const [manualChecked, setManualChecked] = useState<Set<string>>(new Set())
   const [pendingConfirm, setPendingConfirm] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -156,6 +157,20 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
       setEditExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '' }])
       setNewExercise('')
     }
+  }
+
+  function applyTemplate(templateId: string) {
+    const template = programTemplates.find(t => t.id === templateId)
+    if (!template) return
+    setEditExercises(template.exercises.map(pe => ({
+      name: pe.template.title,
+      videoUrl: pe.template.video_url ?? '',
+      instructions: pe.template.instructions ?? '',
+      duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
+    })))
+    if (template.frequency_per_week) setEditFrequency(template.frequency_per_week)
+    setVideoExpanded(new Set())
+    setDetailsExpanded(new Set())
   }
 
   function updateExName(i: number, val: string) {
@@ -233,6 +248,29 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
 
             <div>
               <label className="text-xs font-medium text-slate-400 uppercase tracking-wide block mb-3">Exercises</label>
+
+              {programTemplates.length > 0 && (
+                <div className="mb-4 p-3 rounded-lg border border-dashed bg-slate-50">
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-2">
+                    <ListChecks className="w-3.5 h-3.5" />
+                    Load from a template
+                  </label>
+                  <Select value="" onValueChange={value => applyTemplate(value ?? '')}>
+                    <SelectTrigger className="h-8 text-xs bg-white">
+                      <SelectValue placeholder="Choose a program template..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programTemplates.map(t => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.title} — {t.body_region ?? t.category ?? 'Program'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-400 mt-1.5">Replaces the exercise list below with the template&apos;s exercises.</p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 {editExercises.map((ex, i) => (
                   <div key={i} className="border rounded-lg overflow-hidden">

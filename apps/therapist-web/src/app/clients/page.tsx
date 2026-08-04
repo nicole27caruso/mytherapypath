@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
-import { AssignDrawer } from '@/components/assign-drawer'
 import { ViewProgramDrawer } from '@/components/view-program-drawer'
 import { NewClientModal } from '@/components/new-client-modal'
 import { Search, Plus, Calendar, Repeat2, History } from 'lucide-react'
@@ -16,8 +15,7 @@ import Link from 'next/link'
 type StatusFilter = 'all' | 'active' | 'inactive'
 
 export default function ClientsPage() {
-  const { clientList, clientPrograms, addClient, toggleClientStatus, handleAssign, handleSaveProgram } = useApp()
-  const [drawerClientId, setDrawerClientId] = useState<string | null>(null)
+  const { clientList, clientPrograms, addClient, toggleClientStatus, handleSaveProgram } = useApp()
   const [viewClientId, setViewClientId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -135,9 +133,6 @@ export default function ClientsPage() {
                   <Button size="sm" variant="outline" className="flex-1 text-xs h-8" onClick={() => setViewClientId(client.id)}>
                     View Program
                   </Button>
-                  <Button size="sm" className="flex-1 text-xs h-8 bg-teal-600 hover:bg-teal-700" onClick={() => setDrawerClientId(client.id)}>
-                    Assign Exercise
-                  </Button>
                   <Link href={`/clients/${client.id}`}>
                     <Button size="sm" variant="outline" className="text-xs h-8 gap-1 px-3">
                       <History className="w-3 h-3" />
@@ -157,17 +152,6 @@ export default function ClientsPage() {
           <p className="text-sm mt-1">Try adjusting your search or status filter.</p>
         </div>
       )}
-
-      <AssignDrawer
-        key={drawerClientId}
-        open={drawerClientId !== null}
-        onClose={() => setDrawerClientId(null)}
-        preselectedClientId={drawerClientId ?? undefined}
-        existingExercises={drawerClientId ? clientPrograms[drawerClientId]?.exercises : undefined}
-        existingFrequency={drawerClientId ? clientPrograms[drawerClientId]?.frequency : undefined}
-        existingNotes={drawerClientId ? clientPrograms[drawerClientId]?.notes : undefined}
-        onAssign={(id, exercises, frequency, notes) => handleAssign(id, exercises, frequency, notes)}
-      />
 
       <ViewProgramDrawer
         open={viewClientId !== null}
