@@ -101,13 +101,19 @@ type Exercise = {
 }
 
 type Tab = 'home' | 'progress' | 'messages'
-type CapturedMedia = { uri: string; mediaType: 'photo' | 'video' }
+// `webFile` carries the real File object captured via the browser's file
+// input on web — RN's `{uri, name, type}` FormData shape (used natively)
+// means nothing to a browser's fetch implementation, so web needs the
+// actual Blob/File instead.
+type CapturedMedia = { uri: string; mediaType: 'photo' | 'video'; webFile?: File }
 
 function buildSubmissionForm(exerciseName: string, media: CapturedMedia): FormData {
   const form = new FormData()
   form.append('exercise_name', exerciseName)
   form.append('media_type', media.mediaType)
-  if (media.uri) {
+  if (media.webFile) {
+    form.append('file', media.webFile, media.webFile.name)
+  } else if (media.uri) {
     const uriFilename = media.uri.split('/').pop() || ''
     const ext = (uriFilename.includes('.') ? uriFilename.split('.').pop() : '') || (media.mediaType === 'photo' ? 'jpg' : 'mp4')
     const name = `proof-${Date.now()}.${ext}`
@@ -249,12 +255,31 @@ const ACHIEVEMENTS = [
 
 const WEEKLY_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 // ─── Camera helper ────────────────────────────────────────────────────────────
+
+// Real file picker on web — browsers don't support expo-image-picker's
+// native camera module, so this opens an actual <input type="file"> instead
+// of the previous simulated (empty-uri) capture.
+function openWebFilePicker(mediaType: 'photo' | 'video'): Promise<CapturedMedia | null> {
+  return new Promise(resolve => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = mediaType === 'photo' ? 'image/*' : 'video/*'
+    input.setAttribute('capture', 'environment') // hints mobile browsers to prefer the camera; ignored on desktop
+    input.onchange = () => {
+      const file = input.files?.[0]
+      resolve(file ? { uri: URL.createObjectURL(file), mediaType, webFile: file } : null)
+    }
+    input.click()
+  })
+}
+
 async function openCameraHelper(
   mediaType: 'photo' | 'video',
   onCapture: (media: CapturedMedia) => void,
 ) {
   if (Platform.OS === 'web') {
-    onCapture({ uri: '', mediaType })
+    const media = await openWebFilePicker(mediaType)
+    if (media) onCapture(media)
     return
   }
   const { status } = await ImagePicker.requestCameraPermissionsAsync()
@@ -517,16 +542,12 @@ function ExerciseScreen({
 
       {preview ? (
         <View>
-          {preview.mediaType === 'photo' && preview.uri ? (
+          {preview.mediaType === 'photo' ? (
             <Image source={{ uri: preview.uri }} style={s.previewImage} resizeMode="cover" />
           ) : (
             <View style={[s.previewPlaceholder, { backgroundColor: exercise.color }]}>
-              <Text style={s.previewPlaceholderIcon}>
-                {preview.mediaType === 'video' ? '🎥' : '📷'}
-              </Text>
-              <Text style={s.previewPlaceholderLabel}>
-                {preview.uri ? 'Video captured' : 'Preview (simulated on web)'}
-              </Text>
+              <Text style={s.previewPlaceholderIcon}>🎥</Text>
+              <Text style={s.previewPlaceholderLabel}>Video captured</Text>
             </View>
           )}
 
@@ -671,16 +692,12 @@ function RevisionScreen({
         </AnimatedView>
       ) : preview ? (
         <View>
-          {preview.mediaType === 'photo' && preview.uri ? (
+          {preview.mediaType === 'photo' ? (
             <Image source={{ uri: preview.uri }} style={s.previewImage} resizeMode="cover" />
           ) : (
             <View style={[s.previewPlaceholder, { backgroundColor: color }]}>
-              <Text style={s.previewPlaceholderIcon}>
-                {preview.mediaType === 'video' ? '🎥' : '📷'}
-              </Text>
-              <Text style={s.previewPlaceholderLabel}>
-                {preview.uri ? 'Video captured' : 'Preview (simulated on web)'}
-              </Text>
+              <Text style={s.previewPlaceholderIcon}>🎥</Text>
+              <Text style={s.previewPlaceholderLabel}>Video captured</Text>
             </View>
           )}
           <View style={s.previewActions}>
