@@ -24,6 +24,10 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTe
   const { clientList, programTemplates } = useApp()
   const preTemplate = programTemplates.find(t => t.id === preselectedTemplateId)
   const preClient = clientList.find(c => c.id === preselectedClientId)
+  const templateSelectItems = [
+    { value: 'none', label: 'No template — enter exercises manually' },
+    ...programTemplates.map(t => ({ value: t.id, label: `${t.title} — ${t.body_region ?? t.category ?? 'Program'}` })),
+  ]
 
   const [clientId, setClientId] = useState(preselectedClientId ?? '')
   const initialExercises = existingExercises ?? preTemplate?.exercises.map(pe => ({
@@ -156,7 +160,7 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTe
 
           <div>
             <label className="text-sm font-medium text-slate-700 block mb-2">Starting Template</label>
-            <Select value={templateId || 'none'} onValueChange={value => {
+            <Select items={templateSelectItems} value={templateId || 'none'} onValueChange={value => {
               const selectedId = value === 'none' ? '' : value ?? ''
               setTemplateId(selectedId)
               if (selectedId) {
