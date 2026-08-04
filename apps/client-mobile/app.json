@@ -47,7 +47,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiBase": "http://localhost:8000/v1"
+      "apiBase": "https://api-mtp2026.azurewebsites.net/v1"
     }
   }
 }
