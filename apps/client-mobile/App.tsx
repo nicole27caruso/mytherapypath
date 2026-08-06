@@ -321,15 +321,18 @@ function UploadedVideoPlayer({ uri }: { uri: string }) {
 }
 
 // react-native-webview doesn't support web, so YouTube embeds use a plain
-// <iframe> there and WebView natively.
+// <iframe> there and WebView natively. youtube-nocookie.com + an explicit
+// referrerPolicy avoid YouTube's "Error 153" embed failure, which started
+// appearing when an embedding context strips/blocks the Referer header.
 function YouTubePlayer({ videoId }: { videoId: string }) {
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?playsinline=1`
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?playsinline=1`
   if (Platform.OS === 'web') {
     return createElement('iframe', {
       src: embedUrl,
       style: { width: '100%', height: '100%', border: 0 },
       allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
       allowFullScreen: true,
+      referrerPolicy: 'strict-origin-when-cross-origin',
     })
   }
   return <WebView source={{ uri: embedUrl }} style={s.videoPlayerInner} allowsFullscreenVideo />
