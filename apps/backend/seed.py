@@ -72,81 +72,100 @@ for name, meta in EXERCISES.items():
 
 print(f"  {len(template_map)} exercise templates")
 
-# ── Program Templates ───────────────────────────────────────────────────────────
+# ── Exercise Library (shared, therapist_id=None) ─────────────────────────────
 
-PROGRAM_TEMPLATES = {
-    "Workstation Wrist Recovery": {
-        "description": "Program focused on nerve glides, wrist neutral support, and gradual grip progression for desk workers.",
-        "category": "Upper extremity",
-        "body_region": "Wrist / Hand",
-        "injury_type": "Carpal Tunnel Syndrome",
-        "functional_focus": "Nerve mobility, wrist control, grip strength",
-        "recovery_phase": "Subacute",
-        "goals": "Improve median nerve gliding, reduce wrist strain during keyboard use, and restore pinch function.",
-        "ergonomic_recommendations": "Keep keyboard and mouse at elbow height, use a wrist-support brace in neutral alignment, and schedule frequent microbreaks.",
-        "precautions": "Avoid sustained wrist flexion or forceful gripping during symptom flare-ups.",
-        "equipment_needed": "Theraband, wrist splint, small therapy ball",
-        "progression_criteria": "Patient reports reduced numbness and can hold neutral wrist position for 30 seconds without pain.",
-        "frequency": 4,
-        "exercises": ["Median Nerve Glide", "Wrist Neutral Hold", "Thumb Opposition Practice", "Grip Pinch Progression"],
+EXERCISE_LIBRARY = [
+    {
+        "title": "Carpal Tunnel Syndrome Rehab Exercises",
+        "category": "Wrist & Hand",
+        "description": "Nerve glides, stretches, and general advice for managing carpal tunnel syndrome.",
+        "typically_used_for": "Subacute carpal tunnel syndrome; desk workers with median nerve irritation.",
+        "video_url": "https://www.youtube.com/watch?v=noqq-QSG6w4",
     },
-    "Shoulder Mobility and Scapular Control": {
-        "description": "Structured progression for shoulder impingement and overhead work recovery.",
+    {
+        "title": "Best Exercises for Carpal Tunnel Syndrome",
+        "category": "Wrist & Hand",
+        "description": "Nerve glides, stretches, and mobility drills for carpal tunnel symptoms.",
+        "typically_used_for": "Carpal tunnel syndrome — alternate progression for patients who need more mobility-focused work.",
+        "video_url": "https://www.youtube.com/watch?v=TPXaQFC6xT4",
+    },
+    {
+        "title": "Rotator Cuff Tear Rehab & Exercises",
         "category": "Shoulder",
-        "body_region": "Shoulder",
-        "injury_type": "Rotator Cuff Tendinopathy",
-        "functional_focus": "Scapular stability, overhead range, pain-free movement",
-        "recovery_phase": "Subacute",
-        "goals": "Restore pain-free shoulder range of motion and build scapular control for functional lifting.",
-        "ergonomic_recommendations": "Avoid repeated overhead reaching, use step stools when needed, and alternate tasks to reduce shoulder strain.",
-        "precautions": "Stop if sharp shoulder pain increases and avoid heavy lifting with the affected arm.",
-        "equipment_needed": "Light resistance band",
-        "progression_criteria": "Improved overhead reach with minimal discomfort and ability to hold scapular retraction for 10 seconds.",
-        "frequency": 4,
-        "exercises": ["Pendulum Circles", "Scapular Retraction", "Gentle Shoulder ER"],
+        "description": "Rehab progression for rotator cuff tears covering shoulder pain, tendinitis, and impingement.",
+        "typically_used_for": "Rotator cuff tendinopathy or partial tear, subacute phase.",
+        "video_url": "https://www.youtube.com/watch?v=1Wy8jh4QQH8",
     },
-    "Post-Surgical Radius Rehab": {
-        "description": "Early wrist recovery program emphasizing edema control, gentle motion, and grip reactivation.",
-        "category": "Wrist / Hand",
-        "body_region": "Wrist / Hand",
-        "injury_type": "Distal Radius Fracture",
-        "functional_focus": "Edema control, protected wrist ROM, grip strength",
-        "recovery_phase": "Remodeling",
-        "goals": "Recover safe wrist motion while managing pain and swelling, then progress to functional grip tasks.",
-        "ergonomic_recommendations": "Use built-up handles and padded grips, avoid heavy lifting or pinching during early healing.",
-        "precautions": "Respect surgeon-prescribed motion limits and avoid forceful wrist extension.",
-        "equipment_needed": "Therapy putty, lightweight grip trainer",
-        "progression_criteria": "Able to tolerate gentle wrist motion and perform controlled grip exercises without increased swelling.",
-        "frequency": 4,
-        "exercises": ["Wrist Rotation", "Wrist Extension Stretch", "Grip Pinch Progression"],
+    {
+        "title": "10 Best Exercises for Shoulder Pain, Impingement, Bursitis & Rotator Cuff Disease",
+        "category": "Shoulder",
+        "description": "Ten self-treatment exercises for common shoulder pain presentations.",
+        "typically_used_for": "Shoulder impingement or bursitis; overhead-work-related shoulder strain.",
+        "video_url": "https://www.youtube.com/watch?v=0IkHB763nPk",
     },
-}
+    {
+        "title": "Hand Grip Exercises",
+        "category": "Grip Strength",
+        "description": "Occupational-therapy-led hand and grip strengthening exercises.",
+        "typically_used_for": "General grip weakness; hand rehabilitation following injury or disuse.",
+        "video_url": "https://www.youtube.com/watch?v=QPdrr1NXyNo",
+    },
+    {
+        "title": "Fine Motor Skills Activities (For Toddlers)",
+        "category": "Pediatric — Fine Motor",
+        "description": "Occupational therapy activities to build fine motor skills in young children.",
+        "typically_used_for": "Developmental fine motor delay in toddlers and preschoolers.",
+        "video_url": "https://www.youtube.com/watch?v=_uR0mMgYkOc",
+    },
+    {
+        "title": "Sensory Processing Disorder: Occupational Therapy Demonstration",
+        "category": "Pediatric — Sensory",
+        "description": "Demonstration of occupational therapy techniques for sensory processing disorder.",
+        "typically_used_for": "Sensory modulation disorder; children with sensory-seeking or sensory-avoidant behaviors.",
+        "video_url": "https://www.youtube.com/watch?v=YUdsgQGHSR8",
+    },
+    {
+        "title": "Balance and Coordination Exercises for Kids",
+        "category": "Pediatric — Balance & Coordination",
+        "description": "Balance and bilateral coordination activities for children.",
+        "typically_used_for": "Bilateral coordination delay; pediatric balance and gross motor development.",
+        "video_url": "https://www.youtube.com/watch?v=oCn2kfuIMzs",
+    },
+    {
+        "title": "Best Hand Exercises for Stroke Patients at Home Using Mirror",
+        "category": "Neuro / Post-Stroke",
+        "description": "Mirror-box therapy and hand exercises for stroke recovery, performed at home.",
+        "typically_used_for": "Post-stroke upper-extremity weakness; mirror therapy for motor recovery.",
+        "video_url": "https://www.youtube.com/watch?v=56kk_a93fNQ",
+    },
+    {
+        "title": "Distal Radius Fracture Therapy Exercises",
+        "category": "Post-Surgical Wrist",
+        "description": "Therapy exercises for recovery after a distal radius fracture.",
+        "typically_used_for": "Post-surgical or post-cast distal radius fracture, once cleared for active motion.",
+        "video_url": "https://www.youtube.com/watch?v=Y5uPpic3eX8",
+    },
+    {
+        "title": "Most Important Exercise For Seniors to Master",
+        "category": "Core & Functional Mobility",
+        "description": "Sit-to-stand technique breakdown for building lower-body and core strength safely.",
+        "typically_used_for": "General deconditioning, fall-risk reduction, and sit-to-stand training for older adults.",
+        "video_url": "https://www.youtube.com/watch?v=YzuFGcIiKdw",
+    },
+]
 
-template_library_map = {}
-for title, meta in PROGRAM_TEMPLATES.items():
-    p = models.ProgramTemplate(
-        title=title,
-        description=meta["description"],
-        category=meta.get("category"),
-        body_region=meta.get("body_region"),
-        injury_type=meta.get("injury_type"),
-        functional_focus=meta.get("functional_focus"),
-        recovery_phase=meta.get("recovery_phase"),
-        goals=meta.get("goals"),
-        ergonomic_recommendations=meta.get("ergonomic_recommendations"),
-        precautions=meta.get("precautions"),
-        equipment_needed=meta.get("equipment_needed"),
-        progression_criteria=meta.get("progression_criteria"),
-        frequency_per_week=meta.get("frequency", 3),
-        schedule_days=meta.get("schedule_days"),
-    )
-    db.add(p)
-    db.flush()
-    for index, exercise_name in enumerate(meta["exercises"]):
-        db.add(models.ProgramTemplateExercise(program_template_id=p.id, template_id=template_map[exercise_name], order=index))
-    template_library_map[title] = p.id
+for ex in EXERCISE_LIBRARY:
+    db.add(models.ExerciseTemplate(
+        title=ex["title"],
+        description=ex["description"],
+        typically_used_for=ex["typically_used_for"],
+        video_url=ex["video_url"],
+        video_source="youtube",
+        category=ex["category"],
+        therapist_id=None,
+    ))
 
-print(f"  {len(template_library_map)} program templates")
+print(f"  {len(EXERCISE_LIBRARY)} exercise library entries")
 
 # ── Clients ───────────────────────────────────────────────────────────────────
 

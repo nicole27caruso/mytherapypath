@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, date
 import uuid
 
 from app.database import Base
@@ -55,14 +55,17 @@ class ClientSession(Base):
 class ExerciseTemplate(Base):
     __tablename__ = "exercise_templates"
 
-    id              = Column(String, primary_key=True, default=new_uuid)
-    title           = Column(String(200), nullable=False)
-    description     = Column(Text)
-    instructions    = Column(Text)
-    video_url       = Column(String(500))
-    category        = Column(String(100))
-    duration_minutes = Column(Integer)
-    created_at      = Column(DateTime, default=datetime.utcnow)
+    id                 = Column(String, primary_key=True, default=new_uuid)
+    title              = Column(String(200), nullable=False)
+    description        = Column(Text)
+    instructions       = Column(Text)
+    typically_used_for = Column(Text)                                       # clinical-use note, e.g. "Subacute carpal tunnel syndrome"
+    video_url          = Column(String(500))
+    video_source       = Column(String(20))                                 # youtube | upload
+    category           = Column(String(100))
+    duration_minutes   = Column(Integer)
+    therapist_id       = Column(String, nullable=True, index=True)          # null = shared library item; set = that therapist's private addition
+    created_at         = Column(DateTime, default=datetime.utcnow)
 
     program_exercises = relationship("ProgramExercise", back_populates="template")
 
@@ -95,46 +98,6 @@ class ProgramExercise(Base):
     template = relationship("ExerciseTemplate", back_populates="program_exercises")
 
 
-class ProgramTemplate(Base):
-    __tablename__ = "program_templates"
-
-    id                         = Column(String, primary_key=True, default=new_uuid)
-    title                      = Column(String(200), nullable=False)
-    description                = Column(Text)
-    category                   = Column(String(100))
-    body_region                = Column(String(100))
-    injury_type                = Column(String(100))
-    functional_focus           = Column(String(200))
-    recovery_phase             = Column(String(100))
-    goals                      = Column(Text)
-    ergonomic_recommendations  = Column(Text)
-    precautions                = Column(Text)
-    equipment_needed           = Column(Text)
-    progression_criteria       = Column(Text)
-    frequency_per_week         = Column(Integer, default=3)
-    schedule_days              = Column(String(100))
-    created_at                 = Column(DateTime, default=datetime.utcnow)
-
-    exercises = relationship(
-        "ProgramTemplateExercise",
-        back_populates="program_template",
-        cascade="all, delete-orphan",
-        order_by="ProgramTemplateExercise.order",
-    )
-
-
-class ProgramTemplateExercise(Base):
-    __tablename__ = "program_template_exercises"
-
-    id                  = Column(String, primary_key=True, default=new_uuid)
-    program_template_id = Column(String, ForeignKey("program_templates.id"), nullable=False)
-    template_id         = Column(String, ForeignKey("exercise_templates.id"), nullable=False)
-    order               = Column(Integer, default=0)
-
-    program_template = relationship("ProgramTemplate", back_populates="exercises")
-    template         = relationship("ExerciseTemplate")
-
-
 class Submission(Base):
     __tablename__ = "submissions"
 
@@ -152,6 +115,19 @@ class Submission(Base):
 
     client          = relationship("Client", back_populates="submissions")
     revision_of     = relationship("Submission", remote_side="Submission.id", foreign_keys=[revision_of_id])
+
+
+class ClinicSession(Base):
+    __tablename__ = "clinic_sessions"
+
+    id            = Column(String, primary_key=True, default=new_uuid)
+    client_id     = Column(String, ForeignKey("clients.id"), nullable=False, index=True)
+    exercise_name = Column(String(200), nullable=False)
+    note          = Column(Text)
+    session_date  = Column(Date, nullable=False, default=date.today)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+    client = relationship("Client")
 
 
 class TherapistNote(Base):

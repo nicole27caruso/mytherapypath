@@ -20,7 +20,8 @@
           "color": "#6366F1"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-video"
     ],
     "ios": {
       "supportsTablet": true,

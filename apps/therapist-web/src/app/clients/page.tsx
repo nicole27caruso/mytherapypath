@@ -15,7 +15,7 @@ import Link from 'next/link'
 type StatusFilter = 'all' | 'active' | 'inactive'
 
 export default function ClientsPage() {
-  const { clientList, clientPrograms, addClient, toggleClientStatus, handleSaveProgram } = useApp()
+  const { clientList, clientPrograms, addClient, toggleClientStatus, handleSaveProgram, isLoading } = useApp()
   const [viewClientId, setViewClientId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -146,7 +146,11 @@ export default function ClientsPage() {
         })}
       </div>
 
-      {filtered.length === 0 && (
+      {isLoading ? (
+        <div className="text-center py-20 text-slate-400">
+          <p className="font-medium">Loading clients…</p>
+        </div>
+      ) : filtered.length === 0 && (
         <div className="text-center py-20 text-slate-400">
           <p className="font-medium">No clients match your filter.</p>
           <p className="text-sm mt-1">Try adjusting your search or status filter.</p>

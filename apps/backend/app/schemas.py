@@ -3,22 +3,35 @@ from typing import Optional
 from datetime import datetime, date
 
 
-# ── Exercise Template ─────────────────────────────────────────────────────────
+# ── Exercise Template (Exercise Library) ────────────────────────────────────────
 
 class TemplateBase(BaseModel):
     title: str
     description: Optional[str] = None
     instructions: Optional[str] = None
+    typically_used_for: Optional[str] = None
     video_url: Optional[str] = None
+    video_source: Optional[str] = None       # youtube | upload
     category: Optional[str] = None
     duration_minutes: Optional[int] = None
 
 class TemplateCreate(TemplateBase):
-    pass
+    therapist_id: Optional[str] = None       # null = shared library item; set = that therapist's private addition
+
+class TemplateUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    typically_used_for: Optional[str] = None
+    video_url: Optional[str] = None
+    video_source: Optional[str] = None
+    category: Optional[str] = None
+    duration_minutes: Optional[int] = None
 
 class TemplateOut(TemplateBase):
     model_config = ConfigDict(from_attributes=True)
     id: str
+    therapist_id: Optional[str] = None
     created_at: datetime
 
 
@@ -54,69 +67,6 @@ class ProgramCreate(BaseModel):
     notes: Optional[str] = None
     schedule_days: Optional[str] = None
     template_ids: list[str] = []
-
-
-class ProgramTemplateExerciseOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: str
-    order: int
-    template: TemplateOut
-
-
-class ProgramTemplateOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: str
-    title: str
-    description: Optional[str] = None
-    category: Optional[str] = None
-    body_region: Optional[str] = None
-    injury_type: Optional[str] = None
-    functional_focus: Optional[str] = None
-    recovery_phase: Optional[str] = None
-    goals: Optional[str] = None
-    ergonomic_recommendations: Optional[str] = None
-    precautions: Optional[str] = None
-    equipment_needed: Optional[str] = None
-    progression_criteria: Optional[str] = None
-    frequency_per_week: int = 3
-    schedule_days: Optional[str] = None
-    created_at: datetime
-    exercises: list[ProgramTemplateExerciseOut] = []
-
-
-class ProgramTemplateCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
-    category: Optional[str] = None
-    body_region: Optional[str] = None
-    injury_type: Optional[str] = None
-    functional_focus: Optional[str] = None
-    recovery_phase: Optional[str] = None
-    goals: Optional[str] = None
-    ergonomic_recommendations: Optional[str] = None
-    precautions: Optional[str] = None
-    equipment_needed: Optional[str] = None
-    progression_criteria: Optional[str] = None
-    frequency_per_week: int = 3
-    schedule_days: Optional[str] = None
-    template_ids: list[str] = []
-
-class ProgramTemplateUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    category: Optional[str] = None
-    body_region: Optional[str] = None
-    injury_type: Optional[str] = None
-    functional_focus: Optional[str] = None
-    recovery_phase: Optional[str] = None
-    goals: Optional[str] = None
-    ergonomic_recommendations: Optional[str] = None
-    precautions: Optional[str] = None
-    equipment_needed: Optional[str] = None
-    progression_criteria: Optional[str] = None
-    frequency_per_week: Optional[int] = None
-    schedule_days: Optional[str] = None
-    template_ids: Optional[list[str]] = None
 
 
 # ── Submission ────────────────────────────────────────────────────────────────
@@ -204,6 +154,29 @@ class ClientDetail(ClientOut):
     submissions: list[SubmissionOut] = []
     notes: list[NoteOut] = []
     program: Optional[ProgramOut] = None
+
+
+# ── Clinic Session (in-person "mark done" log) ──────────────────────────────────
+
+class ClinicSessionCreate(BaseModel):
+    exercise_name: str
+    note: Optional[str] = None
+
+class ClinicSessionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    client_id: str
+    exercise_name: str
+    note: Optional[str] = None
+    session_date: date
+    created_at: datetime
+
+
+class WeeklyCompletionWeek(BaseModel):
+    week_start: date
+    week_end: date
+    completed: int
+    target: int
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────

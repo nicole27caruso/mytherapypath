@@ -14,7 +14,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
-  if (!res.ok) throw new ApiError(`API ${options?.method ?? 'GET'} ${path} → ${res.status}`, res.status)
+  if (!res.ok) {
+    const detail = await res.json().then(body => body?.detail).catch(() => null)
+    throw new ApiError(detail || `API ${options?.method ?? 'GET'} ${path} → ${res.status}`, res.status)
+  }
   if (res.status === 204) return undefined as unknown as T
   return res.json() as Promise<T>
 }
@@ -41,9 +44,12 @@ export type ApiTemplate = {
   title: string
   description: string | null
   instructions: string | null
+  typically_used_for: string | null
   video_url: string | null
+  video_source: 'youtube' | 'upload' | null
   category: string | null
   duration_minutes: number | null
+  therapist_id: string | null
   created_at: string
 }
 
@@ -64,30 +70,20 @@ export type ApiProgram = {
   exercises: ApiProgramExercise[]
 }
 
-export type ApiProgramTemplateExercise = {
+export type ApiClinicSession = {
   id: string
-  order: number
-  template: ApiTemplate
+  client_id: string
+  exercise_name: string
+  note: string | null
+  session_date: string
+  created_at: string
 }
 
-export type ApiProgramTemplate = {
-  id: string
-  title: string
-  description: string | null
-  category: string | null
-  body_region: string | null
-  injury_type: string | null
-  functional_focus: string | null
-  recovery_phase: string | null
-  goals: string | null
-  ergonomic_recommendations: string | null
-  precautions: string | null
-  equipment_needed: string | null
-  progression_criteria: string | null
-  frequency_per_week: number | null
-  schedule_days: string | null
-  created_at: string
-  exercises: ApiProgramTemplateExercise[]
+export type ApiWeeklyCompletionWeek = {
+  week_start: string
+  week_end: string
+  completed: number
+  target: number
 }
 
 export type ApiNote = {
@@ -134,16 +130,54 @@ export const api = {
       frequency: number; completed_this_week: number; next_session: string; color: string
     }>) =>
       request<ApiClient>(`/clients/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+    logSession: (clientId: string, body: { exercise_name: string; note?: string | null }) =>
+      request<ApiClinicSession>(`/clients/${clientId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
+
+    sessions: (clientId: string) =>
+      request<ApiClinicSession[]>(`/clients/${clientId}/sessions`),
+
+    weeklyCompletion: (clientId: string, weeks = 8) =>
+      request<ApiWeeklyCompletionWeek[]>(`/clients/${clientId}/weekly-completion?weeks=${weeks}`),
   },
 
   templates: {
-    list: () => request<ApiTemplate[]>('/templates'),
+    list: (params?: { therapistId?: string; category?: string; search?: string }) => {
+      const q = new URLSearchParams()
+      if (params?.therapistId) q.set('therapist_id', params.therapistId)
+      if (params?.category) q.set('category', params.category)
+      if (params?.search) q.set('search', params.search)
+      const qs = q.toString()
+      return request<ApiTemplate[]>(`/templates${qs ? `?${qs}` : ''}`)
+    },
 
     create: (body: {
       title: string; description?: string | null; instructions?: string | null
-      video_url?: string | null; category?: string | null; duration_minutes?: number | null
+      typically_used_for?: string | null
+      video_url?: string | null; video_source?: 'youtube' | 'upload' | null
+      category?: string | null; duration_minutes?: number | null
+      therapist_id?: string | null
     }) =>
       request<ApiTemplate>('/templates', { method: 'POST', body: JSON.stringify(body) }),
+
+    update: (id: string, body: Partial<{
+      title: string; description: string | null; instructions: string | null
+      typically_used_for: string | null
+      video_url: string | null; video_source: 'youtube' | 'upload' | null
+      category: string | null; duration_minutes: number | null
+    }>) =>
+      request<ApiTemplate>(`/templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+    delete: (id: string) =>
+      request<void>(`/templates/${id}`, { method: 'DELETE' }),
+
+    uploadVideo: async (file: File): Promise<{ url: string }> => {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch(`${BASE}/templates/upload-video`, { method: 'POST', body: formData })
+      if (!res.ok) throw new ApiError(`API POST /templates/upload-video → ${res.status}`, res.status)
+      return res.json()
+    },
   },
 
   programs: {
@@ -161,31 +195,6 @@ export const api = {
       notes?: string | null; schedule_days?: string | null; template_ids: string[]
     }) =>
       request<ApiProgram>('/programs', { method: 'POST', body: JSON.stringify(body) }),
-  },
-
-  programTemplates: {
-    list: () => request<ApiProgramTemplate[]>('/program-templates'),
-
-    create: (body: {
-      title: string; description?: string | null; category?: string | null;
-      body_region?: string | null; injury_type?: string | null; functional_focus?: string | null;
-      recovery_phase?: string | null; goals?: string | null; ergonomic_recommendations?: string | null;
-      precautions?: string | null; equipment_needed?: string | null; progression_criteria?: string | null;
-      frequency_per_week?: number | null; schedule_days?: string | null; template_ids: string[]
-    }) =>
-      request<ApiProgramTemplate>('/program-templates', { method: 'POST', body: JSON.stringify(body) }),
-
-    update: (id: string, body: {
-      title?: string; description?: string | null; category?: string | null;
-      body_region?: string | null; injury_type?: string | null; functional_focus?: string | null;
-      recovery_phase?: string | null; goals?: string | null; ergonomic_recommendations?: string | null;
-      precautions?: string | null; equipment_needed?: string | null; progression_criteria?: string | null;
-      frequency_per_week?: number | null; schedule_days?: string | null; template_ids?: string[]
-    }) =>
-      request<ApiProgramTemplate>(`/program-templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-
-    delete: (id: string) =>
-      request<void>(`/program-templates/${id}`, { method: 'DELETE' }),
   },
 
   submissions: {

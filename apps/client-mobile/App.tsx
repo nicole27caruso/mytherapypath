@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ComponentType } from 'react'
+import { useState, useRef, useEffect, createElement, type ComponentType } from 'react'
 import {
   View as RNView,
   Text as RNText,
@@ -29,6 +29,11 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import * as ImagePicker from 'expo-image-picker'
 import * as Notifications from 'expo-notifications'
 import * as SecureStore from 'expo-secure-store'
+import { useVideoPlayer, VideoView as RNVideoView } from 'expo-video'
+import { WebView as RNWebView } from 'react-native-webview'
+
+const VideoView = RNVideoView as unknown as ComponentType<any>
+const WebView = RNWebView as unknown as ComponentType<any>
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
@@ -98,6 +103,7 @@ type Exercise = {
  instructions: string[]
  tip: string
  videoUrl?: string
+ videoSource?: 'youtube' | 'upload'
 }
 
 type Tab = 'home' | 'progress' | 'messages'
@@ -225,6 +231,7 @@ function toExercise(apiEx: {
   description?: string | null
   instructions?: string | null
   video_url?: string | null
+  video_source?: string | null
   category?: string | null
   duration_minutes?: number | null
 }, index: number): Exercise {
@@ -241,6 +248,7 @@ function toExercise(apiEx: {
     instructions: parsedInstructions,
     tip: details?.tip ?? 'Follow the therapist’s instructions and take breaks when needed!',
     videoUrl: apiEx.video_url ?? undefined,
+    videoSource: apiEx.video_source === 'youtube' || apiEx.video_source === 'upload' ? apiEx.video_source : undefined,
   }
 }
 
@@ -296,6 +304,55 @@ async function openCameraHelper(
   if (!result.canceled && result.assets[0]) {
     onCapture({ uri: result.assets[0].uri, mediaType })
   }
+}
+
+// ─── Inline exercise video player ──────────────────────────────────────────────
+
+function extractYouTubeId(url: string): string | null {
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/)
+  return match ? match[1] : null
+}
+
+// expo-video plays direct video files (native + web); it can't play a YouTube
+// page, which is a webpage/streaming manifest, not a raw video file.
+function UploadedVideoPlayer({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, p => { p.loop = false })
+  return <VideoView player={player} style={s.videoPlayerInner} nativeControls contentFit="contain" />
+}
+
+// react-native-webview doesn't support web, so YouTube embeds use a plain
+// <iframe> there and WebView natively.
+function YouTubePlayer({ videoId }: { videoId: string }) {
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?playsinline=1`
+  if (Platform.OS === 'web') {
+    return createElement('iframe', {
+      src: embedUrl,
+      style: { width: '100%', height: '100%', border: 0 },
+      allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
+      allowFullScreen: true,
+    })
+  }
+  return <WebView source={{ uri: embedUrl }} style={s.videoPlayerInner} allowsFullscreenVideo />
+}
+
+function ExerciseVideoPlayer({ exercise }: { exercise: Exercise }) {
+  if (!exercise.videoUrl) {
+    return (
+      <View style={[s.videoBox, { backgroundColor: exercise.color }]}>
+        <Text style={s.videoIcon}>▶</Text>
+        <Text style={s.videoLabel}>No video available for this exercise</Text>
+        <View style={s.videoBadge}>
+          <Text style={s.videoBadgeText}>{exercise.duration}</Text>
+        </View>
+      </View>
+    )
+  }
+  const youTubeId = exercise.videoSource !== 'upload' ? extractYouTubeId(exercise.videoUrl) : null
+  return (
+    <View style={s.videoPlayerBox}>
+      {youTubeId ? <YouTubePlayer videoId={youTubeId} /> : <UploadedVideoPlayer uri={exercise.videoUrl} />}
+    </View>
+  )
 }
 
 // ─── Home Screen ──────────────────────────────────────────────────────────────
@@ -496,13 +553,7 @@ function ExerciseScreen({
         <Text style={s.backBtnText}>← Back to Today</Text>
       </TouchableOpacity>
 
-      <View style={[s.videoBox, { backgroundColor: exercise.color }]}>
-        <Text style={s.videoIcon}>▶</Text>
-        <Text style={s.videoLabel}>{exercise.videoUrl ? 'Watch tutorial video' : 'Tap to play video'}</Text>
-        <View style={s.videoBadge}>
-          <Text style={s.videoBadgeText}>{exercise.duration}</Text>
-        </View>
-      </View>
+      <ExerciseVideoPlayer exercise={exercise} />
 
       <Text style={s.exDetailName}>{exercise.name}</Text>
 
@@ -652,15 +703,14 @@ function RevisionScreen({
         <Text style={s.rejNoticeDate}>Returned on {rejection.date}</Text>
       </View>
 
-      <View style={[s.videoBox, { backgroundColor: color }]}>
-        <Text style={s.videoIcon}>▶</Text>
-        <Text style={s.videoLabel}>Watch tutorial again</Text>
-        {exercise && (
-          <View style={s.videoBadge}>
-            <Text style={s.videoBadgeText}>{exercise.duration}</Text>
-          </View>
-        )}
-      </View>
+      {exercise ? (
+        <ExerciseVideoPlayer exercise={exercise} />
+      ) : (
+        <View style={[s.videoBox, { backgroundColor: color }]}>
+          <Text style={s.videoIcon}>▶</Text>
+          <Text style={s.videoLabel}>Watch tutorial again</Text>
+        </View>
+      )}
 
       <Text style={s.exDetailName}>{rejection.exercise_name}</Text>
 
@@ -1476,6 +1526,10 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
   },
   videoBadgeText: { color: '#fff', fontSize: 12 },
+  videoPlayerBox: {
+    borderRadius: 20, height: 200, marginBottom: 20, overflow: 'hidden', backgroundColor: '#000',
+  },
+  videoPlayerInner: { width: '100%', height: '100%' },
   exDetailName: { fontSize: 22, fontWeight: '700', color: '#1E293B', marginBottom: 10 },
   exMeta: { flexDirection: 'row', gap: 8, marginBottom: 20, flexWrap: 'wrap' },
   exMetaChip: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },

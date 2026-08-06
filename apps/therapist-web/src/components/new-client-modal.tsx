@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useApp } from '@/lib/app-context'
 import { X } from 'lucide-react'
 
 const CLIENT_COLORS = [
@@ -33,7 +31,6 @@ export type NewClient = {
   status: 'active' | 'inactive'
   lastActivity: string
   color: string
-  templateId?: string
   createdAt?: string
   programCreatedAt?: string
 }
@@ -55,9 +52,7 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
   const [nextSession, setNextSession] = useState('')
   const [frequency, setFrequency] = useState('3')
   const [status, setStatus] = useState<'active' | 'inactive'>('active')
-  const [templateId, setTemplateId] = useState<string>('')
   const [saved, setSaved] = useState(false)
-  const { programTemplates } = useApp()
 
   // Calculate age from DOB and keep age field readonly for users
   function calculateAgeFromDob(dobStr: string) {
@@ -99,23 +94,6 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
     return fullName.trim().split(/\s+/).map(w => w[0]?.toUpperCase() ?? '').join('').slice(0, 2)
   }
 
-  function handleTemplateChange(id: string | null) {
-    if (id === null) {
-      setTemplateId('')
-      return
-    }
-    setTemplateId(id)
-    if (id === 'none') {
-      setTemplateId('')
-      return
-    }
-    const t = programTemplates.find(t => t.id === id)
-    if (t) {
-      if (!program.trim()) setProgram(t.title)
-      setFrequency(String(t.frequency_per_week ?? 3))
-    }
-  }
-
   function handleClose() {
     setName('')
     setAge('')
@@ -124,7 +102,6 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
     setNextSession('')
     setFrequency('3')
     setStatus('active')
-    setTemplateId('')
     setSaved(false)
     onClose()
   }
@@ -140,7 +117,7 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
       dob: dob || undefined,
       condition: condition.trim(),
       diagnosis: diagnosis.trim() || undefined,
-      program: program.trim() || (templateId ? programTemplates.find(t => t.id === templateId)?.title ?? 'Program not yet assigned' : 'Program not yet assigned'),
+      program: program.trim() || 'Program not yet assigned',
       frequency: parseInt(frequency) || 3,
       completedThisWeek: 0,
       nextSession: nextSession || '—',
@@ -148,7 +125,6 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
       lastActivity: new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
       color: CLIENT_COLORS[existingCount % CLIENT_COLORS.length],
-      templateId: templateId || undefined,
     }
     onAdd(newClient)
     setSaved(true)
@@ -156,7 +132,6 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
   }
 
   const canSave = !!(name.trim() && dob.trim() && condition.trim() && !dobInvalid)
-  const selectedTemplate = programTemplates.find(t => t.id === templateId)
 
   if (!open) return null
 
@@ -237,31 +212,6 @@ export function NewClientModal({ open, onClose, onAdd, existingCount }: NewClien
                 value={condition}
                 onChange={e => setCondition(e.target.value)}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                Starting Template <span className="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <Select value={templateId || 'none'} onValueChange={handleTemplateChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a template to start from..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No template — start blank</SelectItem>
-                  {programTemplates.map(t => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.title} ({t.frequency_per_week ?? 3}x/week)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedTemplate && (
-                <div className="mt-2 px-3 py-2 bg-teal-50 rounded-lg border border-teal-100">
-                  <p className="text-xs text-teal-700 font-medium mb-1">{selectedTemplate.exercises.length} exercises included:</p>
-                  <p className="text-xs text-teal-600">{selectedTemplate.exercises.map(ex => ex.template.title).join(' · ')}</p>
-                </div>
-              )}
             </div>
 
             <div>

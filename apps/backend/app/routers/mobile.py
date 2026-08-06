@@ -159,6 +159,7 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
                 "description": pe.template.description,
                 "instructions": pe.template.instructions,
                 "video_url": pe.template.video_url,
+                "video_source": pe.template.video_source,
                 "category": pe.template.category,
                 "duration_minutes": pe.template.duration_minutes,
             })

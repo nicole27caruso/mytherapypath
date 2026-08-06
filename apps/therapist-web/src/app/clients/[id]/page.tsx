@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { useApp } from '@/lib/app-context'
 import type { SubmissionEntry } from '@/lib/mock-data'
+import { api, type ApiClinicSession, type ApiWeeklyCompletionWeek } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,85 +14,11 @@ import {
   RotateCcw, CalendarDays, Activity, ClipboardList, Repeat2,
 } from 'lucide-react'
 
-// ─── Mock historical data ──────────────────────────────────────────────────────
-
-// Weekly completion history per client (most recent week first)
-const WEEKLY_HISTORY: Record<string, Array<{ week: string; completed: number; target: number }>> = {
-  '1': [
-    { week: 'Jul 7 – Jul 13',  completed: 2, target: 3 },
-    { week: 'Jun 30 – Jul 6',  completed: 3, target: 3 },
-    { week: 'Jun 23 – Jun 29', completed: 3, target: 3 },
-    { week: 'Jun 16 – Jun 22', completed: 2, target: 3 },
-    { week: 'Jun 9 – Jun 15',  completed: 3, target: 3 },
-    { week: 'Jun 2 – Jun 8',   completed: 1, target: 3 },
-    { week: 'May 26 – Jun 1',  completed: 3, target: 3 },
-    { week: 'May 19 – May 25', completed: 2, target: 3 },
-  ],
-  '2': [
-    { week: 'Jul 7 – Jul 13',  completed: 4, target: 5 },
-    { week: 'Jun 30 – Jul 6',  completed: 5, target: 5 },
-    { week: 'Jun 23 – Jun 29', completed: 5, target: 5 },
-    { week: 'Jun 16 – Jun 22', completed: 4, target: 5 },
-    { week: 'Jun 9 – Jun 15',  completed: 5, target: 5 },
-    { week: 'Jun 2 – Jun 8',   completed: 5, target: 5 },
-    { week: 'May 26 – Jun 1',  completed: 3, target: 5 },
-    { week: 'May 19 – May 25', completed: 4, target: 5 },
-  ],
-  '3': [
-    { week: 'Jul 7 – Jul 13',  completed: 3, target: 3 },
-    { week: 'Jun 30 – Jul 6',  completed: 3, target: 3 },
-    { week: 'Jun 23 – Jun 29', completed: 3, target: 3 },
-    { week: 'Jun 16 – Jun 22', completed: 3, target: 3 },
-    { week: 'Jun 9 – Jun 15',  completed: 2, target: 3 },
-    { week: 'Jun 2 – Jun 8',   completed: 3, target: 3 },
-    { week: 'May 26 – Jun 1',  completed: 3, target: 3 },
-    { week: 'May 19 – May 25', completed: 3, target: 3 },
-  ],
-  '4': [
-    { week: 'Jul 7 – Jul 13',  completed: 0, target: 4 },
-    { week: 'Jun 30 – Jul 6',  completed: 0, target: 4 },
-    { week: 'Jun 23 – Jun 29', completed: 1, target: 4 },
-    { week: 'Jun 16 – Jun 22', completed: 2, target: 4 },
-    { week: 'Jun 9 – Jun 15',  completed: 3, target: 4 },
-    { week: 'Jun 2 – Jun 8',   completed: 4, target: 4 },
-    { week: 'May 26 – Jun 1',  completed: 4, target: 4 },
-    { week: 'May 19 – May 25', completed: 3, target: 4 },
-  ],
-  '5': [
-    { week: 'Jul 7 – Jul 13',  completed: 1, target: 2 },
-    { week: 'Jun 30 – Jul 6',  completed: 2, target: 2 },
-    { week: 'Jun 23 – Jun 29', completed: 2, target: 2 },
-    { week: 'Jun 16 – Jun 22', completed: 1, target: 2 },
-    { week: 'Jun 9 – Jun 15',  completed: 2, target: 2 },
-    { week: 'Jun 2 – Jun 8',   completed: 2, target: 2 },
-    { week: 'May 26 – Jun 1',  completed: 1, target: 2 },
-    { week: 'May 19 – May 25', completed: 2, target: 2 },
-  ],
-}
-
-// In-clinic session log entries per client
-const SESSION_LOGS: Record<string, Array<{ date: string; exerciseName: string; note?: string }>> = {
-  '1': [
-    { date: '2026-07-01', exerciseName: 'Pinch and Release', note: 'Good pinch strength. Improved from last session.' },
-    { date: '2026-06-25', exerciseName: 'Bead Threading' },
-    { date: '2026-06-18', exerciseName: 'Playdough Squeeze', note: 'Emma needed prompting but completed all sets.' },
-  ],
-  '2': [
-    { date: '2026-07-02', exerciseName: 'Ball Squeeze Series', note: 'Grip strength measurably improved.' },
-    { date: '2026-06-28', exerciseName: 'Wrist Rotation' },
-    { date: '2026-06-20', exerciseName: 'Ball Squeeze Series' },
-  ],
-  '3': [
-    { date: '2026-07-02', exerciseName: 'Sensory Bin Activity', note: 'Lily engaged well today.' },
-    { date: '2026-06-25', exerciseName: 'Tactile Cards' },
-  ],
-  '4': [
-    { date: '2026-06-20', exerciseName: 'Grip Training', note: 'Michael reporting pain. Reduced reps.' },
-  ],
-  '5': [
-    { date: '2026-06-30', exerciseName: 'Balance Board Routine', note: 'Great form — ready to increase difficulty.' },
-    { date: '2026-06-18', exerciseName: 'Balance Board Routine' },
-  ],
+function formatWeekLabel(startIso: string, endIso: string): string {
+  const start = new Date(startIso + 'T00:00:00')
+  const end = new Date(endIso + 'T00:00:00')
+  const fmt = (d: Date) => `${d.toLocaleString('en-US', { month: 'short' })} ${d.getDate()}`
+  return `${fmt(start)} – ${fmt(end)}`
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -104,13 +31,21 @@ type SubFilter = 'all' | 'pending' | 'approved' | 'rejected'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ClientHistoryPage({ params }: { params: { id: string } }) {
+export default function ClientHistoryPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const { clientList, clientPrograms, submissionList, isLoading } = useApp()
   const [subFilter, setSubFilter] = useState<SubFilter>('all')
 
-  const client = clientList.find(c => c.id === params.id)
+  const client = clientList.find(c => c.id === id)
 
   const [programDuration, setProgramDuration] = useState<string | null>(null)
+  const [weeklyCompletion, setWeeklyCompletion] = useState<ApiWeeklyCompletionWeek[]>([])
+  const [clinicSessions, setClinicSessions] = useState<ApiClinicSession[]>([])
+
+  useEffect(() => {
+    api.clients.weeklyCompletion(id).then(setWeeklyCompletion).catch(err => console.error('Failed to load weekly completion:', err))
+    api.clients.sessions(id).then(setClinicSessions).catch(err => console.error('Failed to load clinic sessions:', err))
+  }, [id])
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -152,8 +87,16 @@ export default function ClientHistoryPage({ params }: { params: { id: string } }
   const program = clientPrograms[client.id]
   const freq = program?.frequency ?? client.frequency
   const clientSubs = submissionList.filter(s => s.clientId === client.id)
-  const weeklyHistory = WEEKLY_HISTORY[client.id] ?? []
-  const sessionLogs = SESSION_LOGS[client.id] ?? []
+  const weeklyHistory = weeklyCompletion.map(w => ({
+    week: formatWeekLabel(w.week_start, w.week_end),
+    completed: w.completed,
+    target: w.target,
+  }))
+  const sessionLogs = clinicSessions.map(s => ({
+    date: s.session_date,
+    exerciseName: s.exercise_name,
+    note: s.note ?? undefined,
+  }))
 
   // Build unified timeline
   const timeline: TimelineEntry[] = [

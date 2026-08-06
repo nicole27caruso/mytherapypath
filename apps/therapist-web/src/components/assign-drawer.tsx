@@ -3,44 +3,50 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useApp } from '@/lib/app-context'
-import { X, Plus, Minus, Video } from 'lucide-react'
+import { X, Plus, Minus, Video, Library } from 'lucide-react'
+import type { ApiTemplate } from '@/lib/api'
 
 type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string }
+
+function libraryToExercise(t: ApiTemplate): ExerciseEntry {
+  return {
+    name: t.title,
+    videoUrl: t.video_url ?? '',
+    instructions: t.instructions ?? '',
+    duration: t.duration_minutes ? `${t.duration_minutes} min` : '',
+  }
+}
 
 interface AssignDrawerProps {
   open: boolean
   onClose: () => void
   preselectedClientId?: string
-  preselectedTemplateId?: string
+  preselectedExerciseId?: string
   existingExercises?: ExerciseEntry[]
   existingFrequency?: number
   existingNotes?: string
   onAssign?: (clientId: string, exercises: ExerciseEntry[], frequency: number, notes: string) => void
 }
 
-export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTemplateId, existingExercises, existingFrequency, existingNotes, onAssign }: AssignDrawerProps) {
-  const { clientList, programTemplates } = useApp()
-  const preTemplate = programTemplates.find(t => t.id === preselectedTemplateId)
+export function AssignDrawer({ open, onClose, preselectedClientId, preselectedExerciseId, existingExercises, existingFrequency, existingNotes, onAssign }: AssignDrawerProps) {
+  const { clientList, library } = useApp()
+  const preExercise = library.find(t => t.id === preselectedExerciseId)
   const preClient = clientList.find(c => c.id === preselectedClientId)
-  const templateSelectItems = [
-    { value: 'none', label: 'No template — enter exercises manually' },
-    ...programTemplates.map(t => ({ value: t.id, label: `${t.title} — ${t.body_region ?? t.category ?? 'Program'}` })),
-  ]
+
+  const libraryByCategory = new Map<string, ApiTemplate[]>()
+  for (const t of library) {
+    const key = t.category ?? 'Other'
+    libraryByCategory.set(key, [...(libraryByCategory.get(key) ?? []), t])
+  }
 
   const [clientId, setClientId] = useState(preselectedClientId ?? '')
-  const initialExercises = existingExercises ?? preTemplate?.exercises.map(pe => ({
-    name: pe.template.title,
-    videoUrl: pe.template.video_url ?? '',
-    instructions: pe.template.instructions ?? '',
-    duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
-  })) ?? []
+  const initialExercises = existingExercises ?? (preExercise ? [libraryToExercise(preExercise)] : [])
   const [exercises, setExercises] = useState<ExerciseEntry[]>(initialExercises)
   const [newExercise, setNewExercise] = useState('')
-  const [frequency, setFrequency] = useState(existingFrequency ?? preTemplate?.frequency_per_week ?? 3)
+  const [frequency, setFrequency] = useState(existingFrequency ?? 3)
   const [notes, setNotes] = useState(existingNotes ?? '')
-  const [templateId, setTemplateId] = useState(preselectedTemplateId ?? '')
   const [saved, setSaved] = useState(false)
   const [videoExpanded, setVideoExpanded] = useState<Set<number>>(new Set())
 
@@ -48,22 +54,18 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTe
     // Defer setting state to avoid synchronous setState in effect (prevents cascading renders)
     const id = setTimeout(() => {
       setClientId(preselectedClientId ?? '')
-      setTemplateId(preselectedTemplateId ?? '')
-      if (preselectedTemplateId) {
-        const selected = programTemplates.find(t => t.id === preselectedTemplateId)
-        if (selected) {
-          setExercises(selected.exercises.map(pe => ({
-            name: pe.template.title,
-            videoUrl: pe.template.video_url ?? '',
-            instructions: pe.template.instructions ?? '',
-            duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
-          })))
-          setFrequency(selected.frequency_per_week ?? 3)
-        }
+      if (preselectedExerciseId) {
+        const selected = library.find(t => t.id === preselectedExerciseId)
+        if (selected) setExercises([libraryToExercise(selected)])
       }
     }, 0)
     return () => clearTimeout(id)
-  }, [preselectedClientId, preselectedTemplateId, programTemplates])
+  }, [preselectedClientId, preselectedExerciseId, library])
+
+  function addFromLibrary(templateId: string) {
+    const t = library.find(l => l.id === templateId)
+    if (t) setExercises(prev => [...prev, libraryToExercise(t)])
+  }
 
   function addExercise() {
     if (newExercise.trim()) {
@@ -159,35 +161,26 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedTe
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700 block mb-2">Starting Template</label>
-            <Select items={templateSelectItems} value={templateId || 'none'} onValueChange={value => {
-              const selectedId = value === 'none' ? '' : value ?? ''
-              setTemplateId(selectedId)
-              if (selectedId) {
-                const template = programTemplates.find(t => t.id === selectedId)
-                if (template) {
-                  setExercises(template.exercises.map(pe => ({
-                    name: pe.template.title,
-                    videoUrl: pe.template.video_url ?? '',
-                    instructions: pe.template.instructions ?? '',
-                    duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
-                  })))
-                  setFrequency(template.frequency_per_week ?? 3)
-                }
-              }
-            }}>
+            <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 block mb-2">
+              <Library className="w-3.5 h-3.5" />
+              Add from library
+            </label>
+            <Select value="" onValueChange={value => value && addFromLibrary(value)}>
               <SelectTrigger>
-                <SelectValue placeholder="Choose a program template" />
+                <SelectValue placeholder="Search the exercise library..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No template — enter exercises manually</SelectItem>
-                {programTemplates.map(t => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.title} — {t.body_region ?? t.category ?? 'Program'}
-                  </SelectItem>
+                {[...libraryByCategory.entries()].map(([category, items]) => (
+                  <SelectGroup key={category}>
+                    <SelectLabel>{category}</SelectLabel>
+                    {items.map(t => (
+                      <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-slate-400 mt-1.5">Adds the exercise to the list below. You can also type a one-off exercise name manually.</p>
           </div>
 
           <div>

@@ -92,12 +92,24 @@ export function SubmissionModal({
 
           <div className="flex flex-1 overflow-hidden">
             <div className="flex-1 bg-slate-900 flex items-center justify-center min-h-64 relative">
-              {submission.type === 'video' ? (
+              {submission.mediaUrl && submission.type === 'video' ? (
+                <video
+                  src={submission.mediaUrl}
+                  controls
+                  className="w-full h-full max-h-[70vh] object-contain bg-black"
+                />
+              ) : submission.mediaUrl && submission.type === 'photo' ? (
+                <img
+                  src={submission.mediaUrl}
+                  alt={submission.exerciseName}
+                  className="w-full h-full max-h-[70vh] object-contain bg-black"
+                />
+              ) : submission.type === 'video' ? (
                 <div className="flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-full bg-white/10 border-2 border-white/30 flex items-center justify-center hover:bg-white/20 cursor-pointer transition-colors">
+                  <div className="w-20 h-20 rounded-full bg-white/10 border-2 border-white/30 flex items-center justify-center">
                     <Play className="w-8 h-8 text-white ml-1" />
                   </div>
-                  <p className="text-white/60 text-sm">Click to play</p>
+                  <p className="text-white/60 text-sm">No media on file for this submission</p>
                   {submission.duration && (
                     <Badge className="bg-black/40 text-white border-0">{submission.duration}</Badge>
                   )}
@@ -105,7 +117,7 @@ export function SubmissionModal({
               ) : (
                 <div className="flex flex-col items-center gap-3 text-white/40">
                   <ImageIcon className="w-16 h-16" />
-                  <p className="text-sm">Photo submission</p>
+                  <p className="text-sm">No media on file for this submission</p>
                 </div>
               )}
             </div>

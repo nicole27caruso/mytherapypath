@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
@@ -82,3 +84,64 @@ def list_notes(client_id: str, db: Session = Depends(get_db)):
         .order_by(models.TherapistNote.created_at.desc())
         .all()
     )
+
+
+@router.post("/{client_id}/sessions", response_model=schemas.ClinicSessionOut, status_code=201)
+def log_clinic_session(client_id: str, body: schemas.ClinicSessionCreate, db: Session = Depends(get_db)):
+    """Log an exercise as completed during an in-person clinic visit (as opposed to a remote proof submission)."""
+    session = models.ClinicSession(client_id=client_id, **body.model_dump())
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@router.get("/{client_id}/sessions", response_model=list[schemas.ClinicSessionOut])
+def list_clinic_sessions(client_id: str, db: Session = Depends(get_db)):
+    return (
+        db.query(models.ClinicSession)
+        .filter(models.ClinicSession.client_id == client_id)
+        .order_by(models.ClinicSession.session_date.desc())
+        .all()
+    )
+
+
+@router.get("/{client_id}/weekly-completion", response_model=list[schemas.WeeklyCompletionWeek])
+def weekly_completion(client_id: str, weeks: int = 8, db: Session = Depends(get_db)):
+    """Last N weeks (most recent first) of exercise-completion activity for this client.
+
+    A day counts as "completed" if it has an approved proof submission or a
+    logged in-clinic session — the two ways an exercise can be marked done.
+    Target is the client's current program frequency, applied uniformly since
+    frequency history isn't tracked.
+    """
+    client = db.query(models.Client).filter(models.Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    program = db.query(models.Program).filter(models.Program.client_id == client_id).first()
+    target = program.frequency_per_week if program else client.frequency
+
+    completed_dates: set[date] = set()
+    for sub in (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id, models.Submission.status == "approved")
+        .all()
+    ):
+        if sub.submitted_at:
+            completed_dates.add(sub.submitted_at.date())
+    for session in db.query(models.ClinicSession).filter(models.ClinicSession.client_id == client_id).all():
+        completed_dates.add(session.session_date)
+
+    today = date.today()
+    current_week_start = today - timedelta(days=today.weekday())
+
+    result = []
+    for i in range(weeks):
+        week_start = current_week_start - timedelta(weeks=i)
+        week_end = week_start + timedelta(days=6)
+        completed = sum(1 for d in completed_dates if week_start <= d <= week_end)
+        result.append(schemas.WeeklyCompletionWeek(
+            week_start=week_start, week_end=week_end, completed=completed, target=target,
+        ))
+    return result

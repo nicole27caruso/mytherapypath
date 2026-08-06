@@ -4,22 +4,26 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import type { SubmissionEntry } from '@/lib/mock-data'
 import type { NewClient } from '@/components/new-client-modal'
 import type { ClientProgramState } from '@/components/view-program-drawer'
-import { api, THERAPIST_ID, type ApiClient, type ApiProgram, type ApiProgramTemplate, type ApiSubmission } from '@/lib/api'
+import { api, THERAPIST_ID, type ApiClient, type ApiProgram, type ApiTemplate, type ApiSubmission } from '@/lib/api'
 
 type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string }
+
+type LibraryExerciseInput = {
+  title: string; description?: string | null; instructions?: string | null;
+  typically_used_for?: string | null;
+  video_url?: string | null; video_source?: 'youtube' | 'upload' | null;
+  category?: string | null; duration_minutes?: number | null;
+}
 
 type AppContextValue = {
   clientList: NewClient[]
   clientPrograms: Record<string, ClientProgramState>
-  programTemplates: ApiProgramTemplate[]
-  refreshProgramTemplates: () => Promise<void>
-  createProgramTemplate: (body: {
-    title: string; description?: string | null; category?: string | null;
-    body_region?: string | null; injury_type?: string | null; functional_focus?: string | null;
-    recovery_phase?: string | null; goals?: string | null; ergonomic_recommendations?: string | null;
-    precautions?: string | null; equipment_needed?: string | null; progression_criteria?: string | null;
-    frequency_per_week?: number | null; schedule_days?: string | null; template_ids: string[]
-  }) => Promise<ApiProgramTemplate>
+  library: ApiTemplate[]
+  refreshLibrary: () => Promise<void>
+  createLibraryExercise: (body: LibraryExerciseInput & { therapist_id?: string | null }) => Promise<ApiTemplate>
+  updateLibraryExercise: (id: string, body: Partial<LibraryExerciseInput>) => Promise<ApiTemplate>
+  deleteLibraryExercise: (id: string) => Promise<void>
+  uploadLibraryVideo: (file: File) => Promise<{ url: string }>
   submissionList: SubmissionEntry[]
   approved: Set<string>
   rejected: Set<string>
@@ -29,6 +33,7 @@ type AppContextValue = {
   toggleClientStatus: (id: string) => Promise<void>
   handleAssign: (clientId: string, exercises: ExerciseEntry[], frequency: number, notes: string) => void
   handleSaveProgram: (clientId: string, state: ClientProgramState) => void
+  logSession: (clientId: string, exerciseName: string) => Promise<void>
   signOff: (id: string, note: string) => Promise<void>
   reject: (id: string, note: string) => Promise<void>
 }
@@ -79,8 +84,9 @@ function programToState(prog: ApiProgram): ClientProgramState {
 
 // Exercises don't carry a template id from the UI, so saving a program means
 // resolving each exercise to a backend ExerciseTemplate — reusing one that
-// already matches by title, creating a new one otherwise — before replacing
-// the program with the full resolved list (the API replaces, it doesn't merge).
+// already matches by title (from the shared library or this therapist's own),
+// creating a private one-off otherwise — before replacing the program with
+// the full resolved list (the API replaces, it doesn't merge).
 async function persistProgram(
   clientId: string,
   exercises: ExerciseEntry[],
@@ -88,7 +94,7 @@ async function persistProgram(
   notes: string,
   schedule: string[]
 ): Promise<ApiProgram> {
-  const existingTemplates = await api.templates.list()
+  const existingTemplates = await api.templates.list({ therapistId: THERAPIST_ID })
   const templateByTitle = new Map(existingTemplates.map(t => [t.title.trim().toLowerCase(), t]))
 
   const templateIds: string[] = []
@@ -101,7 +107,9 @@ async function persistProgram(
         title: ex.name.trim(),
         instructions: ex.instructions || null,
         video_url: ex.videoUrl || null,
+        video_source: ex.videoUrl ? 'youtube' : null,
         duration_minutes: minutesMatch ? parseInt(minutesMatch[0], 10) : null,
+        therapist_id: THERAPIST_ID, // quick one-off, not added to the shared library
       })
       templateByTitle.set(key, template)
     }
@@ -131,6 +139,7 @@ function toSubmissionEntry(sub: ApiSubmission, clientsMap: Map<string, ApiClient
     status: sub.status as 'pending' | 'approved' | 'rejected',
     notes: sub.therapist_note ?? '',
     duration: sub.duration ?? '',
+    mediaUrl: sub.media_url,
     revisionOf: sub.revision_of_id ?? undefined,
     revisionNumber: sub.revision_number ?? undefined,
   }
@@ -141,7 +150,7 @@ const AppContext = createContext<AppContextValue | null>(null)
 export function AppProvider({ children }: { children: ReactNode }) {
   const [clientList, setClientList] = useState<NewClient[]>([])
   const [clientPrograms, setClientPrograms] = useState<Record<string, ClientProgramState>>({})
-  const [programTemplates, setProgramTemplates] = useState<ApiProgramTemplate[]>([])
+  const [library, setLibrary] = useState<ApiTemplate[]>([])
   const [submissionList, setSubmissionList] = useState<SubmissionEntry[]>([])
   const [approved, setApproved] = useState<Set<string>>(new Set())
   const [rejected, setRejected] = useState<Set<string>>(new Set())
@@ -151,14 +160,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function load() {
       try {
-        const [rawClients, rawSubs, rawTemplateList] = await Promise.all([
+        const [rawClients, rawSubs, rawLibrary] = await Promise.all([
           api.clients.list(),
           api.submissions.list(),
-          api.programTemplates.list(),
+          api.templates.list({ therapistId: THERAPIST_ID }),
         ])
         const clientsMap = new Map(rawClients.map(c => [c.id, c]))
         setClientList(rawClients.map(toNewClient))
-        setProgramTemplates(rawTemplateList)
+        // Exercise rows created as one-off program entries (no video) aren't library content
+        setLibrary(rawLibrary.filter(t => !!t.video_url))
 
         const programEntries = await Promise.all(
           rawClients.map(async c => [c.id, await api.programs.get(c.id)] as const)
@@ -185,25 +195,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     load()
   }, [])
 
-  async function refreshProgramTemplates() {
+  async function refreshLibrary() {
     try {
-      const rawTemplateList = await api.programTemplates.list()
-      setProgramTemplates(rawTemplateList)
+      const rawLibrary = await api.templates.list({ therapistId: THERAPIST_ID })
+      setLibrary(rawLibrary.filter(t => !!t.video_url))
     } catch (err) {
-      console.error('Failed to load program templates:', err)
+      console.error('Failed to load exercise library:', err)
     }
   }
 
-  async function createProgramTemplate(body: {
-    title: string; description?: string | null; category?: string | null;
-    body_region?: string | null; injury_type?: string | null; functional_focus?: string | null;
-    recovery_phase?: string | null; goals?: string | null; ergonomic_recommendations?: string | null;
-    precautions?: string | null; equipment_needed?: string | null; progression_criteria?: string | null;
-    frequency_per_week?: number | null; schedule_days?: string | null; template_ids: string[]
-  }) {
-    const created = await api.programTemplates.create(body)
-    setProgramTemplates(prev => [...prev, created])
+  async function createLibraryExercise(body: LibraryExerciseInput & { therapist_id?: string | null }) {
+    const created = await api.templates.create(body)
+    if (created.video_url) {
+      setLibrary(prev => [...prev, created].sort((a, b) => a.title.localeCompare(b.title)))
+    }
     return created
+  }
+
+  async function updateLibraryExercise(id: string, body: Partial<LibraryExerciseInput>) {
+    const updated = await api.templates.update(id, body)
+    setLibrary(prev => updated.video_url
+      ? prev.map(t => t.id === id ? updated : t)
+      : prev.filter(t => t.id !== id))
+    return updated
+  }
+
+  async function deleteLibraryExercise(id: string) {
+    await api.templates.delete(id)
+    setLibrary(prev => prev.filter(t => t.id !== id))
+  }
+
+  async function uploadLibraryVideo(file: File) {
+    return api.templates.uploadVideo(file)
   }
 
   async function addClient(client: NewClient) {
@@ -221,23 +244,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         status: client.status,
       })
       setClientList(prev => [...prev, toNewClient(created)])
-      if (client.templateId) {
-        const t = programTemplates.find(tmpl => tmpl.id === client.templateId)
-        if (t) {
-          const exercises = t.exercises.map(pe => ({
-            name: pe.template.title,
-            videoUrl: pe.template.video_url ?? '',
-            instructions: pe.template.instructions ?? '',
-            duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
-          }))
-          try {
-            const saved = await persistProgram(created.id, exercises, t.frequency_per_week ?? 3, '', [])
-            setClientPrograms(prev => ({ ...prev, [created.id]: programToState(saved) }))
-          } catch (err) {
-            console.error('Failed to save starter program:', err)
-          }
-        }
-      }
     } catch (err) {
       console.error('Failed to create client:', err)
     }
@@ -269,6 +275,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .catch(err => console.error('Failed to save program:', err))
   }
 
+  async function logSession(clientId: string, exerciseName: string) {
+    try {
+      await api.clients.logSession(clientId, { exercise_name: exerciseName })
+    } catch (err) {
+      console.error('Failed to log clinic session:', err)
+    }
+  }
+
   async function signOff(id: string, note: string) {
     setApproved(prev => new Set([...prev, id]))
     setSubmissionList(prev =>
@@ -296,8 +310,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      clientList, clientPrograms, programTemplates, refreshProgramTemplates, createProgramTemplate, submissionList, approved, rejected, rejectionNotes,
-      isLoading, addClient, toggleClientStatus, handleAssign, handleSaveProgram, signOff, reject,
+      clientList, clientPrograms, library, refreshLibrary, createLibraryExercise, updateLibraryExercise, deleteLibraryExercise, uploadLibraryVideo, submissionList, approved, rejected, rejectionNotes,
+      isLoading, addClient, toggleClientStatus, handleAssign, handleSaveProgram, logSession, signOff, reject,
     }}>
       {children}
     </AppContext.Provider>

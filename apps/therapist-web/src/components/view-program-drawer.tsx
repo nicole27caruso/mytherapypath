@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, Minus, AlignLeft, ListChecks } from 'lucide-react'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { ApiTemplate } from '@/lib/api'
+import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, Minus, AlignLeft, Library } from 'lucide-react'
 
 const CLIENT_PROGRAMS: Record<string, {
   exercises: { name: string; duration: string; instructions: string }[]
@@ -84,7 +85,12 @@ interface ViewProgramDrawerProps {
 }
 
 export function ViewProgramDrawer({ open, clientId, onClose, programOverride, onSaveProgram }: ViewProgramDrawerProps) {
-  const { clientList, submissionList, programTemplates } = useApp()
+  const { clientList, submissionList, library, logSession } = useApp()
+  const libraryByCategory = new Map<string, ApiTemplate[]>()
+  for (const t of library) {
+    const key = t.category ?? 'Other'
+    libraryByCategory.set(key, [...(libraryByCategory.get(key) ?? []), t])
+  }
   const [manualChecked, setManualChecked] = useState<Set<string>>(new Set())
   const [pendingConfirm, setPendingConfirm] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -159,18 +165,15 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
     }
   }
 
-  function applyTemplate(templateId: string) {
-    const template = programTemplates.find(t => t.id === templateId)
-    if (!template) return
-    setEditExercises(template.exercises.map(pe => ({
-      name: pe.template.title,
-      videoUrl: pe.template.video_url ?? '',
-      instructions: pe.template.instructions ?? '',
-      duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
-    })))
-    if (template.frequency_per_week) setEditFrequency(template.frequency_per_week)
-    setVideoExpanded(new Set())
-    setDetailsExpanded(new Set())
+  function addFromLibrary(templateId: string) {
+    const t = library.find(l => l.id === templateId)
+    if (!t) return
+    setEditExercises(prev => [...prev, {
+      name: t.title,
+      videoUrl: t.video_url ?? '',
+      instructions: t.instructions ?? '',
+      duration: t.duration_minutes ? `${t.duration_minutes} min` : '',
+    }])
   }
 
   function updateExName(i: number, val: string) {
@@ -216,6 +219,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   function confirmMarkDone(name: string) {
     setManualChecked(prev => new Set([...prev, name]))
     setPendingConfirm(null)
+    if (clientId) logSession(clientId, name)
   }
 
   function unmarkDone(name: string) {
@@ -249,25 +253,28 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
             <div>
               <label className="text-xs font-medium text-slate-400 uppercase tracking-wide block mb-3">Exercises</label>
 
-              {programTemplates.length > 0 && (
+              {library.length > 0 && (
                 <div className="mb-4 p-3 rounded-lg border border-dashed bg-slate-50">
                   <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-2">
-                    <ListChecks className="w-3.5 h-3.5" />
-                    Load from a template
+                    <Library className="w-3.5 h-3.5" />
+                    Add from library
                   </label>
-                  <Select value="" onValueChange={value => applyTemplate(value ?? '')}>
+                  <Select value="" onValueChange={value => value && addFromLibrary(value)}>
                     <SelectTrigger className="h-8 text-xs bg-white">
-                      <SelectValue placeholder="Choose a program template..." />
+                      <SelectValue placeholder="Search the exercise library..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {programTemplates.map(t => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.title} — {t.body_region ?? t.category ?? 'Program'}
-                        </SelectItem>
+                      {[...libraryByCategory.entries()].map(([category, items]) => (
+                        <SelectGroup key={category}>
+                          <SelectLabel>{category}</SelectLabel>
+                          {items.map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
+                          ))}
+                        </SelectGroup>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-slate-400 mt-1.5">Replaces the exercise list below with the template&apos;s exercises.</p>
+                  <p className="text-xs text-slate-400 mt-1.5">Adds the exercise to the list below. You can also type a one-off exercise name manually.</p>
                 </div>
               )}
 
