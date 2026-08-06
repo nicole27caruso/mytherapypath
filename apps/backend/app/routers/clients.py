@@ -112,15 +112,26 @@ def weekly_completion(client_id: str, weeks: int = 8, db: Session = Depends(get_
 
     A day counts as "completed" if it has an approved proof submission or a
     logged in-clinic session — the two ways an exercise can be marked done.
-    Target is the client's current program frequency, applied uniformly since
-    frequency history isn't tracked.
+    Target is the sum of each currently-assigned exercise's weekly frequency
+    (falling back to the program/client-level frequency), applied uniformly
+    across the history since frequency history isn't tracked.
     """
     client = db.query(models.Client).filter(models.Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    program = db.query(models.Program).filter(models.Program.client_id == client_id).first()
-    target = program.frequency_per_week if program else client.frequency
+    program = (
+        db.query(models.Program)
+        .options(joinedload(models.Program.exercises))
+        .filter(models.Program.client_id == client_id)
+        .first()
+    )
+    if program and program.exercises:
+        target = sum(pe.frequency_per_week or program.frequency_per_week or 3 for pe in program.exercises)
+    elif program:
+        target = program.frequency_per_week
+    else:
+        target = client.frequency
 
     completed_dates: set[date] = set()
     for sub in (

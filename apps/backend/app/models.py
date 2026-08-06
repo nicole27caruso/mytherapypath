@@ -89,10 +89,11 @@ class Program(Base):
 class ProgramExercise(Base):
     __tablename__ = "program_exercises"
 
-    id          = Column(String, primary_key=True, default=new_uuid)
-    program_id  = Column(String, ForeignKey("programs.id"), nullable=False)
-    template_id = Column(String, ForeignKey("exercise_templates.id"), nullable=False)
-    order       = Column(Integer, default=0)
+    id                  = Column(String, primary_key=True, default=new_uuid)
+    program_id          = Column(String, ForeignKey("programs.id"), nullable=False)
+    template_id         = Column(String, ForeignKey("exercise_templates.id"), nullable=False)
+    order               = Column(Integer, default=0)
+    frequency_per_week  = Column(Integer, nullable=True)  # None = inherit Program.frequency_per_week
 
     program  = relationship("Program", back_populates="exercises")
     template = relationship("ExerciseTemplate", back_populates="program_exercises")

@@ -53,10 +53,16 @@ export type ApiTemplate = {
   created_at: string
 }
 
+export type DueStatus = 'complete' | 'on_track' | 'past_due'
+
 export type ApiProgramExercise = {
   id: string
   order: number
   template: ApiTemplate
+  frequency_per_week: number | null
+  weekly_count: number | null
+  weekly_target: number | null
+  due_status: DueStatus | null
 }
 
 export type ApiProgram = {
@@ -193,8 +199,15 @@ export const api = {
     save: (body: {
       client_id: string; name?: string | null; frequency_per_week: number
       notes?: string | null; schedule_days?: string | null; template_ids: string[]
+      exercise_frequencies?: (number | null)[]
     }) =>
       request<ApiProgram>('/programs', { method: 'POST', body: JSON.stringify(body) }),
+
+    updateExerciseFrequency: (programExerciseId: string, frequencyPerWeek: number | null) =>
+      request<ApiProgramExercise>(`/programs/exercises/${programExerciseId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ frequency_per_week: frequencyPerWeek }),
+      }),
   },
 
   submissions: {

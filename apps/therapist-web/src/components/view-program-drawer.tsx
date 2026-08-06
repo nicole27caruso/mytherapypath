@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '@/lib/app-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { ApiTemplate } from '@/lib/api'
-import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, Minus, AlignLeft, Library } from 'lucide-react'
+import { FrequencyChips } from '@/components/frequency-chips'
+import { api, type ApiTemplate, type ApiProgram } from '@/lib/api'
+import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, AlignLeft, Library, AlertTriangle } from 'lucide-react'
 
 const CLIENT_PROGRAMS: Record<string, {
   exercises: { name: string; duration: string; instructions: string }[]
@@ -70,7 +71,7 @@ const CLIENT_PROGRAMS: Record<string, {
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export type ClientProgramState = {
-  exercises: { name: string; videoUrl: string; instructions: string; duration: string }[]
+  exercises: { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number }[]
   frequency: number
   notes: string
   schedule: string[]
@@ -94,7 +95,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   const [manualChecked, setManualChecked] = useState<Set<string>>(new Set())
   const [pendingConfirm, setPendingConfirm] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
-  const [editExercises, setEditExercises] = useState<{ name: string; videoUrl: string; instructions: string; duration: string }[]>([])
+  const [editExercises, setEditExercises] = useState<{ name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number }[]>([])
   const [editFrequency, setEditFrequency] = useState(3)
   const [editNotes, setEditNotes] = useState('')
   const [editSchedule, setEditSchedule] = useState<string[]>([])
@@ -102,6 +103,17 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   const [videoExpanded, setVideoExpanded] = useState<Set<number>>(new Set())
   const [detailsExpanded, setDetailsExpanded] = useState<Set<number>>(new Set())
   const [saved, setSaved] = useState(false)
+  const [liveProgram, setLiveProgram] = useState<ApiProgram | null>(null)
+
+  // Fresh fetch on open — not sourced from the app-wide clientPrograms cache, which is
+  // only populated at mount and after a save, so it wouldn't reflect a submission
+  // approved/rejected moments earlier in the same session.
+  useEffect(() => {
+    if (!open || !clientId) return
+    let cancelled = false
+    api.programs.get(clientId).then(prog => { if (!cancelled) setLiveProgram(prog) })
+    return () => { cancelled = true }
+  }, [open, clientId])
 
   const client = clientList.find(c => c.id === clientId)
   const program = clientId ? (CLIENT_PROGRAMS[clientId] ?? { exercises: [], schedule: [], notes: '' }) : null
@@ -127,14 +139,16 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   const completion = Math.round((client.completedThisWeek / displayFrequency) * 100)
 
   function enterEdit() {
-    const source = programOverride?.exercises ?? program?.exercises.map(e => ({ name: e.name, videoUrl: '', instructions: e.instructions, duration: e.duration })) ?? []
+    const source = programOverride?.exercises ?? program?.exercises.map(e => ({ name: e.name, videoUrl: '', instructions: e.instructions, duration: e.duration, frequencyPerWeek: displayFrequency })) ?? []
     setEditExercises(source.map(ae => {
       const detail = program?.exercises.find(pe => pe.name === ae.name)
+      const live = liveProgram?.exercises.find(pe => pe.template.title === ae.name)
       return {
         name: ae.name,
         videoUrl: ae.videoUrl ?? '',
         instructions: ae.instructions || detail?.instructions || '',
         duration: ae.duration || detail?.duration || '',
+        frequencyPerWeek: live?.frequency_per_week ?? ae.frequencyPerWeek ?? displayFrequency,
       }
     }))
     setEditFrequency(displayFrequency)
@@ -152,7 +166,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   function handleSaveEdit() {
     if (!clientId) return
     const pending = newExercise.trim()
-    const finalExercises = pending ? [...editExercises, { name: pending, videoUrl: '', instructions: '', duration: '' }] : editExercises
+    const finalExercises = pending ? [...editExercises, { name: pending, videoUrl: '', instructions: '', duration: '', frequencyPerWeek: editFrequency }] : editExercises
     onSaveProgram(clientId, { exercises: finalExercises, frequency: editFrequency, notes: editNotes, schedule: editSchedule })
     setSaved(true)
     setTimeout(() => { setSaved(false); setIsEditing(false) }, 1200)
@@ -160,7 +174,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
 
   function addEditExercise() {
     if (newExercise.trim()) {
-      setEditExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '' }])
+      setEditExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '', frequencyPerWeek: editFrequency }])
       setNewExercise('')
     }
   }
@@ -173,7 +187,12 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
       videoUrl: t.video_url ?? '',
       instructions: t.instructions ?? '',
       duration: t.duration_minutes ? `${t.duration_minutes} min` : '',
+      frequencyPerWeek: editFrequency,
     }])
+  }
+
+  function updateExFrequency(i: number, val: number) {
+    setEditExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, frequencyPerWeek: val } : ex))
   }
 
   function updateExName(i: number, val: string) {
@@ -315,6 +334,10 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                         <X className="w-4 h-4" />
                       </button>
                     </div>
+                    <div className="flex items-center gap-2 px-3 py-2 border-t bg-white">
+                      <span className="text-xs text-slate-500 flex-shrink-0">Times/week</span>
+                      <FrequencyChips size="sm" value={ex.frequencyPerWeek} onChange={val => updateExFrequency(i, val)} />
+                    </div>
                     {(detailsExpanded.has(i) || ex.instructions || ex.duration) && (
                       <div className="border-t bg-white px-3 py-3 space-y-2.5">
                         <div>
@@ -375,23 +398,12 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
 
             <div>
               <label className="text-xs font-medium text-slate-400 uppercase tracking-wide block mb-3">
-                Weekly Frequency — <span className="text-teal-600 font-semibold">{editFrequency}x per week</span>
+                Default frequency for new exercises — <span className="text-teal-600 font-semibold">{editFrequency}x per week</span>
               </label>
-              <div className="flex items-center gap-3">
-                <button onClick={() => setEditFrequency(f => Math.max(1, f - 1))} className="w-8 h-8 rounded-full border flex items-center justify-center hover:bg-slate-50 transition-colors">
-                  <Minus className="w-4 h-4 text-slate-500" />
-                </button>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                    <button key={n} onClick={() => setEditFrequency(n)} className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${n <= editFrequency ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                      {n}
-                    </button>
-                  ))}
-                </div>
-                <button onClick={() => setEditFrequency(f => Math.min(7, f + 1))} className="w-8 h-8 rounded-full border flex items-center justify-center hover:bg-slate-50 transition-colors">
-                  <Plus className="w-4 h-4 text-slate-500" />
-                </button>
-              </div>
+              <p className="text-xs text-slate-400 mb-3">
+                Each exercise above has its own weekly target — this is just the starting value applied when you add a new one.
+              </p>
+              <FrequencyChips value={editFrequency} onChange={setEditFrequency} />
             </div>
 
             <div>
@@ -496,6 +508,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                 const hasProof = proofSubmitted.has(ex.name)
                 const manualDone = manualChecked.has(ex.name)
                 const isConfirming = pendingConfirm === ex.name
+                const liveEx = liveProgram?.exercises.find(pe => pe.template.title === ex.name)
 
                 if (isConfirming) {
                   return (
@@ -537,11 +550,24 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                       <div>
                         <p className={`text-sm font-medium ${hasProof ? 'text-emerald-800' : manualDone ? 'text-teal-800' : 'text-slate-800'}`}>{ex.name}</p>
                         <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{ex.instructions}</p>
-                        <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
+                        <div className="flex items-center gap-1 mt-2 text-xs text-slate-400 flex-wrap">
                           <Clock className="w-3 h-3" />
                           {ex.duration}
                           {hasProof && <span className="ml-2 text-emerald-600 font-medium">· Proof submitted</span>}
                           {manualDone && !hasProof && <span className="ml-2 text-teal-600 font-medium">· Marked done — click to undo</span>}
+                          {liveEx?.weekly_target != null && (
+                            <span className="ml-2 flex items-center gap-1">
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-600 hover:bg-slate-100">
+                                {liveEx.weekly_count ?? 0}/{liveEx.weekly_target} this week
+                              </Badge>
+                              {liveEx.due_status === 'past_due' && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-red-100 text-red-600 hover:bg-red-100 flex items-center gap-0.5">
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  Past due
+                                </Badge>
+                              )}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

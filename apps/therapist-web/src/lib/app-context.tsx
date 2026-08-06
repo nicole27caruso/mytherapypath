@@ -6,7 +6,7 @@ import type { NewClient } from '@/components/new-client-modal'
 import type { ClientProgramState } from '@/components/view-program-drawer'
 import { api, THERAPIST_ID, type ApiClient, type ApiProgram, type ApiTemplate, type ApiSubmission } from '@/lib/api'
 
-type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string }
+type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number }
 
 type LibraryExerciseInput = {
   title: string; description?: string | null; instructions?: string | null;
@@ -75,6 +75,7 @@ function programToState(prog: ApiProgram): ClientProgramState {
         videoUrl: pe.template.video_url ?? '',
         instructions: pe.template.instructions ?? '',
         duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
+        frequencyPerWeek: pe.frequency_per_week ?? prog.frequency_per_week,
       })),
     frequency: prog.frequency_per_week,
     notes: prog.notes ?? '',
@@ -98,6 +99,7 @@ async function persistProgram(
   const templateByTitle = new Map(existingTemplates.map(t => [t.title.trim().toLowerCase(), t]))
 
   const templateIds: string[] = []
+  const exerciseFrequencies: (number | null)[] = []
   for (const ex of exercises) {
     const key = ex.name.trim().toLowerCase()
     let template = templateByTitle.get(key)
@@ -114,6 +116,7 @@ async function persistProgram(
       templateByTitle.set(key, template)
     }
     templateIds.push(template.id)
+    exerciseFrequencies.push(ex.frequencyPerWeek ?? null)
   }
 
   return api.programs.save({
@@ -122,6 +125,7 @@ async function persistProgram(
     notes: notes || null,
     schedule_days: schedule.length ? schedule.join(',') : null,
     template_ids: templateIds,
+    exercise_frequencies: exerciseFrequencies,
   })
 }
 
@@ -316,6 +320,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       {children}
     </AppContext.Provider>
   )
+}
+
+// Sum of each assigned exercise's own weekly target — the real per-client weekly
+// target now that frequency lives per-exercise, not once per program.
+export function programTarget(prog: ClientProgramState | undefined, fallback: number): number {
+  if (!prog || prog.exercises.length === 0) return prog?.frequency ?? fallback
+  return prog.exercises.reduce((sum, ex) => sum + (ex.frequencyPerWeek || 0), 0)
 }
 
 export function useApp() {

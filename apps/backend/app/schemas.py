@@ -42,6 +42,10 @@ class ProgramExerciseOut(BaseModel):
     id: str
     order: int
     template: TemplateOut
+    frequency_per_week: Optional[int] = None
+    weekly_count: Optional[int] = None
+    weekly_target: Optional[int] = None
+    due_status: Optional[str] = None
 
 class ProgramSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -67,6 +71,10 @@ class ProgramCreate(BaseModel):
     notes: Optional[str] = None
     schedule_days: Optional[str] = None
     template_ids: list[str] = []
+    exercise_frequencies: Optional[list[Optional[int]]] = None  # parallel to template_ids; None per-item = inherit program frequency
+
+class ProgramExerciseFrequencyUpdate(BaseModel):
+    frequency_per_week: Optional[int] = None  # None = inherit program frequency
 
 
 # ── Submission ────────────────────────────────────────────────────────────────

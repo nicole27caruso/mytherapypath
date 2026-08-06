@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from pydantic import BaseModel
@@ -9,6 +9,7 @@ from sqlalchemy import desc
 from app.database import get_db
 from app import models
 from app.storage import save_submission_media
+from app import scheduling
 
 WEEKDAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -150,9 +151,27 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
 
     messages.sort(key=lambda x: x.pop("_sort", ""), reverse=True)
 
+    now = datetime.utcnow()
+    week_start = scheduling.week_start_utc(now)
+    week_subs = (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id)
+        .filter(models.Submission.submitted_at >= week_start)
+        .filter(models.Submission.status != "rejected")
+        .all()
+    )
+    weekly_counts_by_name = scheduling.bucket_submissions_by_exercise(week_subs)
+    iso_weekday = now.isoweekday()
+
     exercises = []
+    total_weekly_target = 0
+    total_weekly_count = 0
     if program:
         for pe in sorted(program.exercises, key=lambda x: x.order):
+            weekly_target = scheduling.effective_target(pe.frequency_per_week, program.frequency_per_week)
+            weekly_count = weekly_counts_by_name.get(pe.template.title, 0)
+            total_weekly_target += weekly_target
+            total_weekly_count += min(weekly_count, weekly_target)
             exercises.append({
                 "id": pe.template.id,
                 "title": pe.template.title,
@@ -162,6 +181,9 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
                 "video_source": pe.template.video_source,
                 "category": pe.template.category,
                 "duration_minutes": pe.template.duration_minutes,
+                "weekly_target": weekly_target,
+                "weekly_count": weekly_count,
+                "due_status": scheduling.compute_due_status(weekly_count, weekly_target, iso_weekday),
             })
 
     latest_submissions = {}
@@ -187,15 +209,6 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
 
     # Real weekly/lifetime activity, computed from submissions rather than the
     # static seeded `completed_this_week` column (which nothing ever updates).
-    now = datetime.utcnow()
-    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-    week_subs = (
-        db.query(models.Submission)
-        .filter(models.Submission.client_id == client_id)
-        .filter(models.Submission.submitted_at >= week_start)
-        .filter(models.Submission.status != "rejected")
-        .all()
-    )
     completed_this_week = len({s.exercise_name for s in week_subs})
     week_activity = sorted(
         {s.submitted_at.strftime('%a') for s in week_subs if s.submitted_at},
@@ -222,6 +235,8 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
             "frequency": client.frequency,
             "completed_this_week": completed_this_week,
             "week_activity": week_activity,
+            "total_weekly_target": total_weekly_target,
+            "total_weekly_count": total_weekly_count,
             "next_session": client.next_session,
             "stars_total": total_completed * 5,
             "therapist_name": therapist.name if therapist else None,

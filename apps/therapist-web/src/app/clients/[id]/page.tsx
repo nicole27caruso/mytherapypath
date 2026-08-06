@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
-import { useApp } from '@/lib/app-context'
+import { useApp, programTarget } from '@/lib/app-context'
 import type { SubmissionEntry } from '@/lib/mock-data'
 import { api, type ApiClinicSession, type ApiWeeklyCompletionWeek } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
@@ -85,7 +85,7 @@ export default function ClientHistoryPage({ params }: { params: Promise<{ id: st
   }
 
   const program = clientPrograms[client.id]
-  const freq = program?.frequency ?? client.frequency
+  const freq = programTarget(program, client.frequency)
   const clientSubs = submissionList.filter(s => s.clientId === client.id)
   const weeklyHistory = weeklyCompletion.map(w => ({
     week: formatWeekLabel(w.week_start, w.week_end),

@@ -5,17 +5,19 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useApp } from '@/lib/app-context'
-import { X, Plus, Minus, Video, Library } from 'lucide-react'
+import { FrequencyChips } from '@/components/frequency-chips'
+import { X, Plus, Video, Library } from 'lucide-react'
 import type { ApiTemplate } from '@/lib/api'
 
-type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string }
+export type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number }
 
-function libraryToExercise(t: ApiTemplate): ExerciseEntry {
+function libraryToExercise(t: ApiTemplate, defaultFrequency: number): ExerciseEntry {
   return {
     name: t.title,
     videoUrl: t.video_url ?? '',
     instructions: t.instructions ?? '',
     duration: t.duration_minutes ? `${t.duration_minutes} min` : '',
+    frequencyPerWeek: defaultFrequency,
   }
 }
 
@@ -42,10 +44,10 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
   }
 
   const [clientId, setClientId] = useState(preselectedClientId ?? '')
-  const initialExercises = existingExercises ?? (preExercise ? [libraryToExercise(preExercise)] : [])
+  const [frequency, setFrequency] = useState(existingFrequency ?? 3)
+  const initialExercises = existingExercises ?? (preExercise ? [libraryToExercise(preExercise, existingFrequency ?? 3)] : [])
   const [exercises, setExercises] = useState<ExerciseEntry[]>(initialExercises)
   const [newExercise, setNewExercise] = useState('')
-  const [frequency, setFrequency] = useState(existingFrequency ?? 3)
   const [notes, setNotes] = useState(existingNotes ?? '')
   const [saved, setSaved] = useState(false)
   const [videoExpanded, setVideoExpanded] = useState<Set<number>>(new Set())
@@ -56,7 +58,7 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
       setClientId(preselectedClientId ?? '')
       if (preselectedExerciseId) {
         const selected = library.find(t => t.id === preselectedExerciseId)
-        if (selected) setExercises([libraryToExercise(selected)])
+        if (selected) setExercises([libraryToExercise(selected, existingFrequency ?? 3)])
       }
     }, 0)
     return () => clearTimeout(id)
@@ -64,14 +66,18 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
 
   function addFromLibrary(templateId: string) {
     const t = library.find(l => l.id === templateId)
-    if (t) setExercises(prev => [...prev, libraryToExercise(t)])
+    if (t) setExercises(prev => [...prev, libraryToExercise(t, frequency)])
   }
 
   function addExercise() {
     if (newExercise.trim()) {
-      setExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '' }])
+      setExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '', frequencyPerWeek: frequency }])
       setNewExercise('')
     }
+  }
+
+  function updateExerciseFrequency(i: number, val: number) {
+    setExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, frequencyPerWeek: val } : ex))
   }
 
   function removeExercise(i: number) {
@@ -99,7 +105,7 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
   function handleSave() {
     const pending = newExercise.trim()
     const finalExercises = pending
-      ? [...exercises, { name: pending, videoUrl: '', instructions: '', duration: '' }]
+      ? [...exercises, { name: pending, videoUrl: '', instructions: '', duration: '', frequencyPerWeek: frequency }]
       : exercises
     if (pending) setNewExercise('')
     const resolvedClientId = preselectedClientId || clientId
@@ -212,6 +218,14 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                  <div className="flex items-center gap-2 px-2.5 py-2 border-t bg-white">
+                    <span className="text-xs text-slate-500 flex-shrink-0">Times/week</span>
+                    <FrequencyChips
+                      size="sm"
+                      value={ex.frequencyPerWeek}
+                      onChange={val => updateExerciseFrequency(i, val)}
+                    />
+                  </div>
                   {(videoExpanded.has(i) || ex.videoUrl) && (
                     <div className="border-t bg-white px-3 py-2.5">
                       <div className="flex items-center gap-2">
@@ -254,36 +268,13 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
 
           <div>
             <label className="text-sm font-medium text-slate-700 block mb-3">
-              Weekly Frequency —{' '}
+              Default frequency for new exercises —{' '}
               <span className="text-teal-600 font-semibold">{frequency}x per week</span>
             </label>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setFrequency(f => Math.max(1, f - 1))}
-                className="w-8 h-8 rounded-full border flex items-center justify-center hover:bg-slate-50 transition-colors"
-              >
-                <Minus className="w-4 h-4 text-slate-500" />
-              </button>
-              <div className="flex gap-1">
-                {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                  <button
-                    key={n}
-                    onClick={() => setFrequency(n)}
-                    className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${
-                      n <= frequency ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-400'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setFrequency(f => Math.min(7, f + 1))}
-                className="w-8 h-8 rounded-full border flex items-center justify-center hover:bg-slate-50 transition-colors"
-              >
-                <Plus className="w-4 h-4 text-slate-500" />
-              </button>
-            </div>
+            <p className="text-xs text-slate-400 mb-3">
+              Each exercise can have its own weekly target (set per-row above) — this is just the starting value applied when you add a new one.
+            </p>
+            <FrequencyChips value={frequency} onChange={setFrequency} />
           </div>
 
           <div>

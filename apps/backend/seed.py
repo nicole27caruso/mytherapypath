@@ -185,19 +185,19 @@ print(f"  {len(clients_data)} clients")
 # ── Programs ──────────────────────────────────────────────────────────────────
 
 CLIENT_PROGRAMS = {
-    "1": {"name": "Pediatric Fine Motor Program",    "frequency": 3, "exercises": ["Pinch and Release", "Bead Threading", "Playdough Squeeze", "Scissors Practice"]},
-    "2": {"name": "Adult Stroke Rehab Phase 2",      "frequency": 5, "exercises": ["Mirror Therapy", "Ball Squeeze Series", "Passive ROM", "Wrist Rotation"]},
-    "3": {"name": "Sensory Integration Basics",      "frequency": 3, "exercises": ["Sensory Bin Activity", "Tactile Cards", "Weighted Lap Pad", "Deep Pressure Input"]},
-    "4": {"name": "Post-Surgery Hand Recovery",      "frequency": 4, "exercises": ["Ball Squeeze", "Wrist Curls", "Finger Extensions", "Grip Training"]},
-    "5": {"name": "Pediatric Coordination Program",  "frequency": 2, "exercises": ["Balance Board Routine", "Bean Bag Toss", "Jump Rope", "Coordination Drills"]},
+    "1": {"name": "Pediatric Fine Motor Program",    "frequency": 3, "exercises": [("Pinch and Release", 3), ("Bead Threading", 5), ("Playdough Squeeze", 2), ("Scissors Practice", 3)]},
+    "2": {"name": "Adult Stroke Rehab Phase 2",      "frequency": 5, "exercises": [("Mirror Therapy", 6), ("Ball Squeeze Series", 4), ("Passive ROM", 7), ("Wrist Rotation", 5)]},
+    "3": {"name": "Sensory Integration Basics",      "frequency": 3, "exercises": [("Sensory Bin Activity", 4), ("Tactile Cards", 2), ("Weighted Lap Pad", 3), ("Deep Pressure Input", 3)]},
+    "4": {"name": "Post-Surgery Hand Recovery",      "frequency": 4, "exercises": [("Ball Squeeze", 2), ("Wrist Curls", 2), ("Finger Extensions", 2), ("Grip Training", 2)]},
+    "5": {"name": "Pediatric Coordination Program",  "frequency": 2, "exercises": [("Balance Board Routine", 3), ("Bean Bag Toss", 2), ("Jump Rope", 4), ("Coordination Drills", 2)]},
 }
 
 for client_id, prog in CLIENT_PROGRAMS.items():
     p = models.Program(client_id=client_id, name=prog["name"], frequency_per_week=prog["frequency"])
     db.add(p)
     db.flush()
-    for i, ex_name in enumerate(prog["exercises"]):
-        db.add(models.ProgramExercise(program_id=p.id, template_id=template_map[ex_name], order=i))
+    for i, (ex_name, ex_frequency) in enumerate(prog["exercises"]):
+        db.add(models.ProgramExercise(program_id=p.id, template_id=template_map[ex_name], order=i, frequency_per_week=ex_frequency))
 
 print(f"  {len(CLIENT_PROGRAMS)} programs")
 

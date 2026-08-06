@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useApp } from '@/lib/app-context'
+import { useApp, programTarget } from '@/lib/app-context'
 import type { SubmissionEntry } from '@/lib/mock-data'
 import { SubmissionModal } from '@/components/submission-modal'
 import { Badge } from '@/components/ui/badge'
@@ -42,7 +42,7 @@ export default function DashboardPage() {
   const avgCompletion = activeClients.length > 0
     ? Math.round(
         activeClients.reduce((acc, c) => {
-          const freq = clientPrograms[c.id]?.frequency ?? c.frequency
+          const freq = programTarget(clientPrograms[c.id], c.frequency)
           return acc + (c.completedThisWeek / freq) * 100
         }, 0) / activeClients.length
       )
@@ -109,7 +109,7 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {clientList.map((client, i) => {
-                    const freq = clientPrograms[client.id]?.frequency ?? client.frequency
+                    const freq = programTarget(clientPrograms[client.id], client.frequency)
                     return (
                       <tr key={client.id} className={`border-b last:border-0 ${i % 2 === 0 ? '' : 'bg-slate-50/50'}`}>
                         <td className="px-6 py-3">

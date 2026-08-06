@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useApp } from '@/lib/app-context'
+import { useApp, programTarget } from '@/lib/app-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -73,7 +73,7 @@ export default function ClientsPage() {
       <div className="grid grid-cols-2 gap-4">
         {filtered.map(client => {
           const prog = clientPrograms[client.id]
-          const freq = prog?.frequency ?? client.frequency
+          const freq = programTarget(prog, client.frequency)
           const completion = Math.round((client.completedThisWeek / freq) * 100)
           return (
             <Card key={client.id} className="hover:shadow-md transition-shadow">

@@ -88,10 +88,14 @@ type ClientInfo = {
  completedThisWeek: number
  weekActivity: string[]
  frequency: number
+ totalWeeklyTarget: number
+ totalWeeklyCount: number
  nextSession?: string | null
  therapistName: string
 }
- 
+
+type DueStatus = 'complete' | 'on_track' | 'past_due'
+
 type Exercise = {
  id: string
  name: string
@@ -104,6 +108,9 @@ type Exercise = {
  tip: string
  videoUrl?: string
  videoSource?: 'youtube' | 'upload'
+ weeklyCount: number
+ weeklyTarget: number
+ dueStatus: DueStatus
 }
 
 type Tab = 'home' | 'progress' | 'messages'
@@ -140,7 +147,7 @@ type RejectionItem = Extract<MessageItem, { kind: 'rejected' }>
 
 // ─── Exercise visual/content details (local — UI presentation only) ───────────
 
-type ExerciseDetails = Omit<Exercise, 'id' | 'name'>
+type ExerciseDetails = Omit<Exercise, 'id' | 'name' | 'weeklyCount' | 'weeklyTarget' | 'dueStatus'>
 
 const EXERCISE_DETAILS: Record<string, ExerciseDetails> = {
   'Pinch and Release': {
@@ -234,6 +241,9 @@ function toExercise(apiEx: {
   video_source?: string | null
   category?: string | null
   duration_minutes?: number | null
+  weekly_count?: number | null
+  weekly_target?: number | null
+  due_status?: string | null
 }, index: number): Exercise {
   const details = EXERCISE_DETAILS[apiEx.title]
   const parsedInstructions = parseInstructions(apiEx.instructions ?? details?.instructions.join('\n'))
@@ -249,6 +259,9 @@ function toExercise(apiEx: {
     tip: details?.tip ?? 'Follow the therapist’s instructions and take breaks when needed!',
     videoUrl: apiEx.video_url ?? undefined,
     videoSource: apiEx.video_source === 'youtube' || apiEx.video_source === 'upload' ? apiEx.video_source : undefined,
+    weeklyCount: apiEx.weekly_count ?? 0,
+    weeklyTarget: apiEx.weekly_target ?? 3,
+    dueStatus: (apiEx.due_status === 'complete' || apiEx.due_status === 'past_due' || apiEx.due_status === 'on_track') ? apiEx.due_status : 'on_track',
   }
 }
 
@@ -364,7 +377,6 @@ function HomeScreen({
   exercises,
   messages,
   clientInfo,
-  completed,
   submissionStatus,
   resubmitted,
   onExercise,
@@ -373,13 +385,12 @@ function HomeScreen({
   exercises: Exercise[]
   messages: MessageItem[]
   clientInfo: ClientInfo
-  completed: Set<string>
   submissionStatus: Record<string, 'pending' | 'approved' | 'rejected'>
   resubmitted: Set<string>
   onExercise: (ex: Exercise) => void
   onRevise: (rejection: RejectionItem) => void
 }) {
-  const done = completed.size
+  const done = exercises.filter(ex => ex.weeklyCount >= ex.weeklyTarget).length
   const total = exercises.length
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
@@ -422,7 +433,7 @@ function HomeScreen({
 
       <View style={s.progressCard}>
         <View style={s.progressHeader}>
-          <Text style={s.progressTitle}>Today's Progress</Text>
+          <Text style={s.progressTitle}>This Week's Progress</Text>
           <Text style={s.progressPct}>{done}/{total} done</Text>
         </View>
         <View style={s.progressBar}>
@@ -430,7 +441,7 @@ function HomeScreen({
         </View>
         {done === total && total > 0 && (
           <AnimatedView style={{ transform: [{ scale: celebAnim }] }}>
-            <Text style={s.allDone}>🎉 Amazing! You finished all exercises today!</Text>
+            <Text style={s.allDone}>🎉 Amazing! You've hit every exercise's target this week!</Text>
           </AnimatedView>
         )}
       </View>
@@ -457,7 +468,7 @@ function HomeScreen({
       <Text style={s.sectionTitle}>Today's Exercises</Text>
 
       {exercises.map((ex, index) => {
-        const isDone = completed.has(ex.id)
+        const isDone = ex.weeklyCount >= ex.weeklyTarget
         const status = submissionStatus[ex.id]
         const bounceAnim = getBounceAnim(ex.id)
         return (
@@ -475,6 +486,14 @@ function HomeScreen({
                 <View style={[s.diffBadge, { backgroundColor: ex.bgColor }]}>
                   <Text style={[s.diffText, { color: ex.color }]}>{ex.difficulty}</Text>
                 </View>
+                <View style={s.diffBadge}>
+                  <Text style={s.diffText}>{ex.weeklyCount}/{ex.weeklyTarget} this week</Text>
+                </View>
+                {ex.dueStatus === 'past_due' && (
+                  <View style={s.revisionBadge}>
+                    <Text style={s.revisionBadgeText}>⚠ Past due</Text>
+                  </View>
+                )}
                 {status === 'approved' && (
                   <View style={s.proofBadge}>
                     <Text style={s.proofBadgeText}>✅ Approved</Text>
@@ -516,29 +535,31 @@ function HomeScreen({
 
 function ExerciseScreen({
   exercise,
-  existingCapture,
   status,
   rejection,
-  approvedNote,
   therapistName,
   onCapture,
   onRevise,
   onBack,
 }: {
   exercise: Exercise
-  existingCapture: CapturedMedia | null
   status?: 'pending' | 'approved' | 'rejected'
   rejection?: RejectionItem | null
-  approvedNote?: string
   therapistName: string
   onCapture: (exerciseId: string, media: CapturedMedia) => void
   onRevise: (rejection: RejectionItem) => void
   onBack: () => void
 }) {
   const therapist = therapistName || 'your therapist'
-  const [preview, setPreview] = useState<CapturedMedia | null>(existingCapture)
-  const [submitted, setSubmitted] = useState(!!existingCapture)
-  const submitAnim = useRef(new Animated.Value(submitted ? 1 : 0)).current
+  // preview/submitted are purely "captured this visit" state — never seeded from
+  // server history, so a still-under-target exercise always starts on the upload
+  // buttons rather than latching a stale "already submitted" lock.
+  const [preview, setPreview] = useState<CapturedMedia | null>(null)
+  const [submitted, setSubmitted] = useState(false)
+  const submitAnim = useRef(new Animated.Value(0)).current
+
+  const isRejectedPending = status === 'rejected' && !!rejection
+  const isWeeklyComplete = exercise.weeklyCount >= exercise.weeklyTarget
 
   function handleSubmit() {
     if (!preview) return
@@ -549,6 +570,20 @@ function ExerciseScreen({
       Animated.spring(submitAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
     ]).start()
   }
+
+  // Once the server confirms the new submission (exercise.weeklyCount ticks up after
+  // the parent's reload), drop the transient "Submitted!" box — falls through to either
+  // the "complete for this week" box or fresh upload buttons, whichever is now true,
+  // instead of latching submitted=true forever like the old all-time lock did.
+  const weeklyCountRef = useRef(exercise.weeklyCount)
+  useEffect(() => {
+    if (submitted && exercise.weeklyCount !== weeklyCountRef.current) {
+      setPreview(null)
+      setSubmitted(false)
+      submitAnim.setValue(0)
+    }
+    weeklyCountRef.current = exercise.weeklyCount
+  }, [exercise.weeklyCount, submitted])
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.screenContent} showsVerticalScrollIndicator={false}>
@@ -591,70 +626,74 @@ function ExerciseScreen({
         <Text style={[s.tipText, { color: exercise.color }]}>{exercise.tip}</Text>
       </View>
 
-      <Text style={s.uploadTitle}>Upload Your Proof</Text>
-      <Text style={s.uploadSub}>Show {therapist} how well you did!</Text>
+      {isRejectedPending ? (
+        <View style={s.rejNoticeBox}>
+          <Text style={s.rejNoticeTitle}>✕ Revision requested by {therapist}</Text>
+          <Text style={s.rejNoticeText}>{rejection!.rejection_note}</Text>
+          <TouchableOpacity style={[s.reviseNowBtn, { backgroundColor: RED }]} onPress={() => onRevise(rejection!)}>
+            <Text style={s.submitBtnText}>Revise Now</Text>
+          </TouchableOpacity>
+        </View>
+      ) : isWeeklyComplete ? (
+        <AnimatedView style={[s.successBox, { backgroundColor: GREEN_LIGHT }]}>
+          <Text style={s.successText}>🎉 Complete for this week!</Text>
+          <Text style={s.successNote}>{exercise.weeklyCount}/{exercise.weeklyTarget} done</Text>
+        </AnimatedView>
+      ) : (
+        <>
+          <Text style={s.uploadTitle}>Upload Your Proof</Text>
+          <Text style={s.uploadSub}>Show {therapist} how well you did! · {exercise.weeklyCount}/{exercise.weeklyTarget} this week</Text>
 
-      {preview ? (
-        <View>
-          {preview.mediaType === 'photo' ? (
-            <Image source={{ uri: preview.uri }} style={s.previewImage} resizeMode="cover" />
-          ) : (
-            <View style={[s.previewPlaceholder, { backgroundColor: exercise.color }]}>
-              <Text style={s.previewPlaceholderIcon}>🎥</Text>
-              <Text style={s.previewPlaceholderLabel}>Video captured</Text>
+          {preview ? (
+            <View>
+              {preview.mediaType === 'photo' ? (
+                <Image source={{ uri: preview.uri }} style={s.previewImage} resizeMode="cover" />
+              ) : (
+                <View style={[s.previewPlaceholder, { backgroundColor: exercise.color }]}>
+                  <Text style={s.previewPlaceholderIcon}>🎥</Text>
+                  <Text style={s.previewPlaceholderLabel}>Video captured</Text>
+                </View>
+              )}
+
+              {!submitted ? (
+                <View style={s.previewActions}>
+                  <TouchableOpacity style={s.retakeBtn} onPress={() => { setPreview(null); submitAnim.setValue(0) }}>
+                    <Text style={s.retakeBtnText}>Retake</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.submitBtn, { backgroundColor: exercise.color }]}
+                    onPress={handleSubmit}
+                  >
+                    <Text style={s.submitBtnText}>Submit to {therapist} ✓</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <AnimatedView style={[s.successBox, { backgroundColor: exercise.bgColor,
+                  transform: [{ scale: submitAnim }] }]}
+                >
+                  <Text style={s.successText}>🌟 Submitted! {therapist} will review it soon.</Text>
+                </AnimatedView>
+              )}
             </View>
-          )}
-
-          {!submitted ? (
-            <View style={s.previewActions}>
-              <TouchableOpacity style={s.retakeBtn} onPress={() => { setPreview(null); submitAnim.setValue(0) }}>
-                <Text style={s.retakeBtnText}>Retake</Text>
+          ) : (
+            <View style={s.uploadRow}>
+              <TouchableOpacity
+                style={[s.uploadBtn, { borderColor: exercise.color }]}
+                onPress={() => openCameraHelper('photo', media => { setPreview(media); submitAnim.setValue(0) })}
+              >
+                <Text style={s.uploadBtnEmoji}>📷</Text>
+                <Text style={[s.uploadBtnLabel, { color: exercise.color }]}>Take Photo</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[s.submitBtn, { backgroundColor: exercise.color }]}
-                onPress={handleSubmit}
+                style={[s.uploadBtn, { borderColor: exercise.color }]}
+                onPress={() => openCameraHelper('video', media => { setPreview(media); submitAnim.setValue(0) })}
               >
-                <Text style={s.submitBtnText}>Submit to {therapist} ✓</Text>
+                <Text style={s.uploadBtnEmoji}>🎥</Text>
+                <Text style={[s.uploadBtnLabel, { color: exercise.color }]}>Record Video</Text>
               </TouchableOpacity>
             </View>
-          ) : status === 'approved' ? (
-            <AnimatedView style={[s.successBox, { backgroundColor: GREEN_LIGHT, transform: [{ scale: submitAnim }] }]}>
-              <Text style={s.successText}>✅ Approved by {therapist}!</Text>
-              {approvedNote ? <Text style={s.successNote}>{approvedNote}</Text> : null}
-            </AnimatedView>
-          ) : status === 'rejected' && rejection ? (
-            <View style={s.rejNoticeBox}>
-              <Text style={s.rejNoticeTitle}>✕ Revision requested by {therapist}</Text>
-              <Text style={s.rejNoticeText}>{rejection.rejection_note}</Text>
-              <TouchableOpacity style={[s.reviseNowBtn, { backgroundColor: RED }]} onPress={() => onRevise(rejection)}>
-                <Text style={s.submitBtnText}>Revise Now</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <AnimatedView style={[s.successBox, { backgroundColor: exercise.bgColor,
-              transform: [{ scale: submitAnim }] }]}
-            >
-              <Text style={s.successText}>🌟 Submitted! {therapist} will review it soon.</Text>
-            </AnimatedView>
           )}
-        </View>
-      ) : (
-        <View style={s.uploadRow}>
-          <TouchableOpacity
-            style={[s.uploadBtn, { borderColor: exercise.color }]}
-            onPress={() => openCameraHelper('photo', media => { setPreview(media); submitAnim.setValue(0) })}
-          >
-            <Text style={s.uploadBtnEmoji}>📷</Text>
-            <Text style={[s.uploadBtnLabel, { color: exercise.color }]}>Take Photo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.uploadBtn, { borderColor: exercise.color }]}
-            onPress={() => openCameraHelper('video', media => { setPreview(media); submitAnim.setValue(0) })}
-          >
-            <Text style={s.uploadBtnEmoji}>🎥</Text>
-            <Text style={[s.uploadBtnLabel, { color: exercise.color }]}>Record Video</Text>
-          </TouchableOpacity>
-        </View>
+        </>
       )}
     </ScrollView>
   )
@@ -789,8 +828,8 @@ function RevisionScreen({
 function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; clientInfo: ClientInfo }) {
   const todayDayIndex = new Date().getDay()
   const todayLabel = WEEKLY_DAYS[todayDayIndex === 0 ? 6 : todayDayIndex - 1]
-  const weeklyTarget = clientInfo.frequency || 3
-  const completedThisWeek = clientInfo.completedThisWeek
+  const weeklyTarget = clientInfo.totalWeeklyTarget || clientInfo.frequency || 3
+  const completedThisWeek = clientInfo.totalWeeklyCount
   const weeklyPct = weeklyTarget > 0 ? Math.round((completedThisWeek / weeklyTarget) * 100) : 0
 
   return (
@@ -1055,7 +1094,6 @@ export default function App() {
   const [selectedRevision, setSelectedRevision] = useState<RejectionItem | null>(null)
 
   const [completed, setCompleted] = useState<Set<string>>(new Set())
-  const [capturedMedia, setCapturedMedia] = useState<Record<string, CapturedMedia>>({})
   const [submissionStatus, setSubmissionStatus] = useState<Record<string, 'pending' | 'approved' | 'rejected'>>({})
   const [resubmitted, setResubmitted] = useState<Set<string>>(new Set())
 
@@ -1064,6 +1102,8 @@ export default function App() {
     completedThisWeek: 0,
     weekActivity: [],
     frequency: 3,
+    totalWeeklyTarget: 0,
+    totalWeeklyCount: 0,
     nextSession: null,
     therapistName: '',
   })
@@ -1098,6 +1138,8 @@ export default function App() {
         completedThisWeek: data.client.completed_this_week ?? 0,
         weekActivity: data.client.week_activity ?? [],
         frequency: data.client.frequency ?? 3,
+        totalWeeklyTarget: data.client.total_weekly_target ?? 0,
+        totalWeeklyCount: data.client.total_weekly_count ?? 0,
         nextSession: data.client.next_session ?? null,
         therapistName: data.client.therapist_name ?? '',
       })
@@ -1110,17 +1152,6 @@ export default function App() {
           .filter(ex => submissionByName.get(ex.name)?.status !== 'rejected')
           .map(ex => ex.id)
       ))
-      setCapturedMedia(
-        Object.fromEntries(
-          submittedExercises.map(ex => {
-            const submission = submissionByName.get(ex.name)
-            return [ex.id, {
-              uri: submission?.media_url ?? '',
-              mediaType: (submission?.media_type as 'photo' | 'video') ?? 'photo',
-            }]
-          })
-        )
-      )
       setSubmissionStatus(
         Object.fromEntries(
           submittedExercises.map(ex => [ex.id, submissionByName.get(ex.name)?.status as 'pending' | 'approved' | 'rejected'])
@@ -1134,6 +1165,7 @@ export default function App() {
           .map(m => m.id)
       )
       setResubmitted(alreadyRevised)
+      return loadedExercises
     } catch (err) {
       console.error('Failed to load from API — using defaults:', err)
     } finally {
@@ -1174,11 +1206,10 @@ export default function App() {
     await setStoredToken(null)
 
     // Reset client-scoped state so a different login never sees stale data.
-    setClientInfo({ name: '', fullName: '', age: 0, starsTotal: 0, completedThisWeek: 0, weekActivity: [], frequency: 3, nextSession: null, therapistName: '' })
+    setClientInfo({ name: '', fullName: '', age: 0, starsTotal: 0, completedThisWeek: 0, weekActivity: [], frequency: 3, totalWeeklyTarget: 0, totalWeeklyCount: 0, nextSession: null, therapistName: '' })
     setExercises([])
     setMessages([])
     setCompleted(new Set())
-    setCapturedMedia({})
     setSubmissionStatus({})
     setResubmitted(new Set())
     setActiveTab('home')
@@ -1235,7 +1266,6 @@ export default function App() {
   }
 
   async function handleCapture(exerciseId: string, media: CapturedMedia) {
-    setCapturedMedia(prev => ({ ...prev, [exerciseId]: media }))
     const ex = exercises.find(e => e.id === exerciseId)
     if (!ex || !token) return
     try {
@@ -1247,7 +1277,12 @@ export default function App() {
       if (res.status === 401) return handleLogout()
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setCompleted(prev => new Set(prev).add(exerciseId))
-      await loadDashboard()
+      const freshExercises = await loadDashboard()
+      // The open ExerciseScreen (if any) holds a frozen `exercise` object — without
+      // re-syncing it here, its weeklyCount stays stale until the user backs out and
+      // re-enters, even though `exercises` state itself just refreshed above.
+      const freshEx = freshExercises?.find(e => e.id === exerciseId)
+      if (freshEx) setSelectedEx(freshEx)
     } catch (err) {
       console.error('Failed to record submission:', err)
     }
@@ -1298,13 +1333,6 @@ export default function App() {
       ) ?? null
     : null
 
-  const selectedExApprovedNote = selectedEx
-    ? messages.find(
-        (m): m is Extract<MessageItem, { kind: 'approved' }> =>
-          m.kind === 'approved' && m.exercise_name === selectedEx.name
-      )?.therapist_note
-    : undefined
-
   if (!authChecked || (token && isLoading)) {
     return (
       <SafeAreaProvider>
@@ -1342,10 +1370,8 @@ export default function App() {
           ) : activeTab === 'home' && selectedEx ? (
             <ExerciseScreen
               exercise={selectedEx}
-              existingCapture={capturedMedia[selectedEx.id] ?? null}
               status={submissionStatus[selectedEx.id]}
               rejection={selectedExRejection}
-              approvedNote={selectedExApprovedNote}
               therapistName={clientInfo.therapistName}
               onCapture={handleCapture}
               onRevise={handleRevise}
@@ -1356,7 +1382,6 @@ export default function App() {
               exercises={exercises}
               messages={messages}
               clientInfo={clientInfo}
-              completed={completed}
               submissionStatus={submissionStatus}
               resubmitted={resubmitted}
               onExercise={ex => setSelectedEx(ex)}
