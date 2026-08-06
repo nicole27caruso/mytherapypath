@@ -1,0 +1,41 @@
+name: Deploy client-mobile web to Azure Static Web Apps
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build_and_deploy_job:
+    runs-on: ubuntu-latest
+    name: Build and Deploy Job
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # npm workspaces monorepo — install from the root so hoisted
+      # dependencies resolve correctly, same as apps/client-mobile expects
+      # locally (it has no node_modules of its own).
+      - name: Install dependencies
+        run: npm ci
+
+      # Expo isn't a framework Azure's Static Web Apps build system
+      # recognizes automatically (unlike e.g. Next.js), so we export the
+      # static web build ourselves and hand Azure the finished output
+      # rather than letting it try to build the app itself.
+      - name: Export Expo web build
+        working-directory: apps/client-mobile
+        run: npx expo export --platform web
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_MTP_MOBILE_WEB }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "apps/client-mobile/dist"
+          skip_app_build: true
