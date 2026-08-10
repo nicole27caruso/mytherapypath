@@ -46,6 +46,8 @@ class ProgramExerciseOut(BaseModel):
     weekly_count: Optional[int] = None
     weekly_target: Optional[int] = None
     due_status: Optional[str] = None
+    min_days_between: Optional[int] = None
+    days_until_available: Optional[int] = None
 
 class ProgramSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -72,9 +74,11 @@ class ProgramCreate(BaseModel):
     schedule_days: Optional[str] = None
     template_ids: list[str] = []
     exercise_frequencies: Optional[list[Optional[int]]] = None  # parallel to template_ids; None per-item = inherit program frequency
+    exercise_min_days: Optional[list[Optional[int]]] = None  # parallel to template_ids; None/0 per-item = no spacing requirement
 
 class ProgramExerciseFrequencyUpdate(BaseModel):
     frequency_per_week: Optional[int] = None  # None = inherit program frequency
+    min_days_between: Optional[int] = None  # None/0 = no spacing requirement
 
 
 # ── Submission ────────────────────────────────────────────────────────────────

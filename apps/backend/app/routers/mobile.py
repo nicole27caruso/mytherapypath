@@ -163,6 +163,17 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
     weekly_counts_by_name = scheduling.bucket_submissions_by_exercise(week_subs)
     iso_weekday = now.isoweekday()
 
+    # All-time, non-rejected submissions per exercise -- a rejection shouldn't
+    # block an immediate revision, so it's excluded from the spacing gap the
+    # same way it's already excluded from the weekly count above.
+    all_nonrejected_subs = (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id)
+        .filter(models.Submission.status != "rejected")
+        .all()
+    )
+    last_submission_date_by_name = scheduling.latest_submission_date_by_exercise(all_nonrejected_subs)
+
     exercises = []
     total_weekly_target = 0
     total_weekly_count = 0
@@ -172,6 +183,11 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
             weekly_count = weekly_counts_by_name.get(pe.template.title, 0)
             total_weekly_target += weekly_target
             total_weekly_count += min(weekly_count, weekly_target)
+            days_until_available = scheduling.days_until_available(
+                last_submission_date_by_name.get(pe.template.title),
+                pe.min_days_between,
+                now.date(),
+            )
             exercises.append({
                 "id": pe.template.id,
                 "title": pe.template.title,
@@ -184,6 +200,8 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
                 "weekly_target": weekly_target,
                 "weekly_count": weekly_count,
                 "due_status": scheduling.compute_due_status(weekly_count, weekly_target, iso_weekday),
+                "min_days_between": pe.min_days_between,
+                "days_until_available": days_until_available,
             })
 
     latest_submissions = {}

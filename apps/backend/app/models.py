@@ -94,6 +94,7 @@ class ProgramExercise(Base):
     template_id         = Column(String, ForeignKey("exercise_templates.id"), nullable=False)
     order               = Column(Integer, default=0)
     frequency_per_week  = Column(Integer, nullable=True)  # None = inherit Program.frequency_per_week
+    min_days_between    = Column(Integer, nullable=True)  # None/0 = no spacing requirement
 
     program  = relationship("Program", back_populates="exercises")
     template = relationship("ExerciseTemplate", back_populates="program_exercises")

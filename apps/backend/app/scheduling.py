@@ -35,3 +35,25 @@ def compute_due_status(weekly_count: int, weekly_target: int, iso_weekday: int) 
     if weekly_count < expected_by_now:
         return "past_due"
     return "on_track"
+
+
+def latest_submission_date_by_exercise(subs) -> dict[str, "date"]:
+    """subs: an already-fetched list of non-rejected Submission rows (any date range).
+    Keeps the most recent submitted_at date per exercise name."""
+    latest: dict[str, "date"] = {}
+    for s in subs:
+        if not s.submitted_at:
+            continue
+        d = s.submitted_at.date()
+        if s.exercise_name not in latest or d > latest[s.exercise_name]:
+            latest[s.exercise_name] = d
+    return latest
+
+
+def days_until_available(last_submission_date, min_days_between: int | None, today=None) -> int:
+    """0 = can submit now. last_submission_date may be None (never submitted -> always 0)."""
+    if not min_days_between or min_days_between <= 0 or last_submission_date is None:
+        return 0
+    today = today or datetime.utcnow().date()
+    days_since = (today - last_submission_date).days
+    return max(0, min_days_between - days_since)

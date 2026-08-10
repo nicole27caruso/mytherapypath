@@ -34,12 +34,25 @@ def get_program(client_id: str, db: Session = Depends(get_db)):
     weekly_counts_by_name = scheduling.bucket_submissions_by_exercise(week_subs)
     iso_weekday = now.isoweekday()
 
+    all_nonrejected_subs = (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id)
+        .filter(models.Submission.status != "rejected")
+        .all()
+    )
+    last_submission_date_by_name = scheduling.latest_submission_date_by_exercise(all_nonrejected_subs)
+
     for pe in prog.exercises:
         target = scheduling.effective_target(pe.frequency_per_week, prog.frequency_per_week)
         count = weekly_counts_by_name.get(pe.template.title, 0)
         pe.weekly_target = target
         pe.weekly_count = count
         pe.due_status = scheduling.compute_due_status(count, target, iso_weekday)
+        pe.days_until_available = scheduling.days_until_available(
+            last_submission_date_by_name.get(pe.template.title),
+            pe.min_days_between,
+            now.date(),
+        )
 
     return prog
 
@@ -50,6 +63,11 @@ def create_or_replace_program(body: schemas.ProgramCreate, db: Session = Depends
         raise HTTPException(
             status_code=400,
             detail="exercise_frequencies must be the same length as template_ids",
+        )
+    if body.exercise_min_days is not None and len(body.exercise_min_days) != len(body.template_ids):
+        raise HTTPException(
+            status_code=400,
+            detail="exercise_min_days must be the same length as template_ids",
         )
 
     # Delete existing program for this client (replace model)
@@ -70,7 +88,11 @@ def create_or_replace_program(body: schemas.ProgramCreate, db: Session = Depends
 
     for i, template_id in enumerate(body.template_ids):
         frequency = body.exercise_frequencies[i] if body.exercise_frequencies else None
-        pe = models.ProgramExercise(program_id=prog.id, template_id=template_id, order=i, frequency_per_week=frequency)
+        min_days = body.exercise_min_days[i] if body.exercise_min_days else None
+        pe = models.ProgramExercise(
+            program_id=prog.id, template_id=template_id, order=i,
+            frequency_per_week=frequency, min_days_between=min_days,
+        )
         db.add(pe)
 
     # Keep client.frequency in sync
@@ -101,6 +123,7 @@ def update_program_exercise_frequency(
         raise HTTPException(status_code=404, detail="Program exercise not found")
 
     pe.frequency_per_week = body.frequency_per_week
+    pe.min_days_between = body.min_days_between
     db.commit()
     db.refresh(pe)
 
@@ -119,4 +142,15 @@ def update_program_exercise_frequency(
     pe.weekly_target = target
     pe.weekly_count = count
     pe.due_status = scheduling.compute_due_status(count, target, now.isoweekday())
+
+    last_sub = (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == prog.client_id)
+        .filter(models.Submission.status != "rejected")
+        .filter(models.Submission.exercise_name == pe.template.title)
+        .order_by(models.Submission.submitted_at.desc())
+        .first()
+    )
+    last_date = last_sub.submitted_at.date() if last_sub and last_sub.submitted_at else None
+    pe.days_until_available = scheduling.days_until_available(last_date, pe.min_days_between, now.date())
     return pe
