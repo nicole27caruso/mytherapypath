@@ -1,23 +1,52 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app import models, schemas
+from app import models, schemas, scheduling
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 
 @router.get("", response_model=list[schemas.ClientOut])
 def list_clients(therapist_id: str, db: Session = Depends(get_db)):
-    return (
+    clients = (
         db.query(models.Client)
-        .options(joinedload(models.Client.program))
+        .options(joinedload(models.Client.program).joinedload(models.Program.exercises).joinedload(models.ProgramExercise.template))
         .filter(models.Client.therapist_id == therapist_id)
         .order_by(models.Client.created_at.desc())
         .all()
     )
+    if not clients:
+        return clients
+
+    # Same fix as /dashboard: completed_this_week on the row itself is a
+    # static seeded column nothing updates -- override it per-client with the
+    # real count from this week's non-rejected submissions before returning.
+    week_start = scheduling.week_start_utc(datetime.utcnow())
+    week_subs = (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id.in_([c.id for c in clients]))
+        .filter(models.Submission.submitted_at >= week_start)
+        .filter(models.Submission.status != "rejected")
+        .all()
+    )
+    subs_by_client: dict[str, list] = {}
+    for s in week_subs:
+        subs_by_client.setdefault(s.client_id, []).append(s)
+
+    for c in clients:
+        counts_by_name = scheduling.bucket_submissions_by_exercise(subs_by_client.get(c.id, []))
+        if c.program and c.program.exercises:
+            c.completed_this_week = sum(
+                min(counts_by_name.get(pe.template.title, 0), scheduling.effective_target(pe.frequency_per_week, c.program.frequency_per_week))
+                for pe in c.program.exercises
+            )
+        else:
+            c.completed_this_week = 0
+
+    return clients
 
 
 @router.get("/{client_id}", response_model=schemas.ClientDetail)
