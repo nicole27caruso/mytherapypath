@@ -10,6 +10,15 @@ on:
       - main
   workflow_dispatch:
 
+# Azure's OneDeploy holds a single lock per App Service -- two runs landing
+# close together (e.g. two pushes within a minute) collide on it with a 409,
+# even though neither run is otherwise broken. Cancelling a superseded
+# in-progress run avoids that; the newer push's code is what should ship
+# anyway.
+concurrency:
+  group: deploy-api-mtp2026
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
