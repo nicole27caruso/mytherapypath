@@ -337,6 +337,18 @@ function UploadedVideoPlayer({ uri }: { uri: string }) {
 // <iframe> there and WebView natively. youtube-nocookie.com + an explicit
 // referrerPolicy avoid YouTube's "Error 153" embed failure, which started
 // appearing when an embedding context strips/blocks the Referer header.
+//
+// On native, navigating the WebView straight to the embed URL (source={{uri}})
+// makes the video itself the WebView's top-level page — there's no "parent
+// page" origin for YouTube to see as the embedder, which is a second, distinct
+// way to trigger Error 153 (WKWebView/Android WebView don't send the same
+// Referer a real browser tab does for a direct navigation). The fix is to
+// give it a real parent page: load a tiny HTML wrapper with the same iframe
+// + referrerPolicy the web build already uses, via source={{html, baseUrl}}
+// with baseUrl set to our actual deployed origin, so the embed sees a
+// legitimate cross-origin iframe exactly like the working web case.
+const VIDEO_EMBED_ORIGIN = 'https://zealous-mud-04996bd0f.7.azurestaticapps.net/'
+
 function YouTubePlayer({ videoId }: { videoId: string }) {
   const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?playsinline=1`
   if (Platform.OS === 'web') {
@@ -348,7 +360,21 @@ function YouTubePlayer({ videoId }: { videoId: string }) {
       referrerPolicy: 'strict-origin-when-cross-origin',
     })
   }
-  return <WebView source={{ uri: embedUrl }} style={s.videoPlayerInner} allowsFullscreenVideo />
+  const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+    `<body style="margin:0;padding:0;background:#000;overflow:hidden;">` +
+    `<iframe src="${embedUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" ` +
+    `referrerpolicy="strict-origin-when-cross-origin" ` +
+    `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" ` +
+    `allowfullscreen></iframe></body></html>`
+  return (
+    <WebView
+      source={{ html, baseUrl: VIDEO_EMBED_ORIGIN }}
+      style={s.videoPlayerInner}
+      allowsFullscreenVideo
+      originWhitelist={['*']}
+      mediaPlaybackRequiresUserAction={false}
+    />
+  )
 }
 
 function ExerciseVideoPlayer({ exercise }: { exercise: Exercise }) {
