@@ -12,63 +12,6 @@ import { GapChips } from '@/components/gap-chips'
 import { api, type ApiTemplate, type ApiProgram } from '@/lib/api'
 import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, AlignLeft, Library, AlertTriangle, Hourglass } from 'lucide-react'
 
-const CLIENT_PROGRAMS: Record<string, {
-  exercises: { name: string; duration: string; instructions: string }[]
-  schedule: string[]
-  notes: string
-}> = {
-  '1': {
-    exercises: [
-      { name: 'Pinch and Release', duration: '5 min', instructions: 'Pick up small objects using a pinch grip and release into a container.' },
-      { name: 'Bead Threading', duration: '5 min', instructions: 'Thread large plastic beads onto a lace or shoelace.' },
-      { name: 'Playdough Squeeze', duration: '5 min', instructions: 'Roll, squeeze, and flatten playdough into balls and snakes.' },
-      { name: 'Scissors Practice', duration: '5 min', instructions: 'Cut along straight and curved printed lines with child-safe scissors.' },
-    ],
-    schedule: ['Mon', 'Wed', 'Fri'],
-    notes: 'Emma responds well to colorful materials and game-based framing. Keep sessions playful and positive. Reward sticker chart has been effective.',
-  },
-  '2': {
-    exercises: [
-      { name: 'Mirror Therapy', duration: '10 min', instructions: 'Use mirror box for visual feedback — focus on symmetrical arm movements.' },
-      { name: 'Ball Squeeze Series', duration: '10 min', instructions: 'Squeeze therapy ball with increasing resistance, 3 sets of 15 reps.' },
-      { name: 'Passive ROM', duration: '15 min', instructions: 'Passive range-of-motion for shoulder and elbow — caregiver assisted.' },
-      { name: 'Wrist Rotation', duration: '10 min', instructions: 'Slow controlled wrist rotations, 3 sets of 10 reps each direction.' },
-    ],
-    schedule: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-    notes: 'Monitor fatigue carefully. James tires quickly — allow 2-minute breaks between exercises. His affected side has improved ~15% this month.',
-  },
-  '3': {
-    exercises: [
-      { name: 'Sensory Bin Activity', duration: '8 min', instructions: 'Explore rice, dried beans, or kinetic sand with hands; hide and find objects.' },
-      { name: 'Tactile Cards', duration: '7 min', instructions: 'Match textures by touch without looking (soft, rough, bumpy, smooth).' },
-      { name: 'Weighted Lap Pad', duration: '5 min', instructions: 'Calming deep pressure using weighted lap pad — seated at table.' },
-      { name: 'Deep Pressure Input', duration: '5 min', instructions: 'Firm hand-over-hand pressure on arms and legs for body awareness.' },
-    ],
-    schedule: ['Tue', 'Thu', 'Sat'],
-    notes: 'Lily prefers low-stimulation environments. Dim lights when possible. Avoid loud background noise during sessions. Parent present at all times.',
-  },
-  '4': {
-    exercises: [
-      { name: 'Ball Squeeze', duration: '8 min', instructions: 'Grip therapy ball, hold 5 seconds, release — 3 sets of 10.' },
-      { name: 'Wrist Curls', duration: '8 min', instructions: 'Light resistance wrist curls, palms up and palms down alternating.' },
-      { name: 'Finger Extensions', duration: '7 min', instructions: 'Extend fingers against resistance band, 3 sets of 12 reps.' },
-      { name: 'Grip Training', duration: '7 min', instructions: 'Forearm grip device at 50% resistance — increase each week.' },
-    ],
-    schedule: ['Mon', 'Tue', 'Thu', 'Fri'],
-    notes: 'Michael is currently on leave following a flare-up. Program is on hold — next review scheduled for July 5th. Contact before resuming.',
-  },
-  '5': {
-    exercises: [
-      { name: 'Balance Board Routine', duration: '8 min', instructions: 'Stand on balance board and maintain center position for 30 seconds, 5 reps.' },
-      { name: 'Bean Bag Toss', duration: '7 min', instructions: 'Toss and catch bean bags with alternating hands at increasing distance.' },
-      { name: 'Jump Rope', duration: '5 min', instructions: 'Basic jump rope with two-foot landing, 3 sets of 20 jumps with rest.' },
-      { name: 'Coordination Drills', duration: '5 min', instructions: 'Agility ladder footwork drills for bilateral foot-eye coordination.' },
-    ],
-    schedule: ['Wed', 'Sat'],
-    notes: 'Sophie is making excellent progress. Consider increasing to 3x/week next month. She has shown strong motivation and self-initiates practice.',
-  },
-}
-
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export type ClientProgramState = {
@@ -117,38 +60,37 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   }, [open, clientId])
 
   const client = clientList.find(c => c.id === clientId)
-  const program = clientId ? (CLIENT_PROGRAMS[clientId] ?? { exercises: [], schedule: [], notes: '' }) : null
 
-  if (!open || !client || !program) return null
+  if (!open || !client) return null
 
   const clientSubmissions = submissionList.filter(s => s.clientId === clientId)
   const proofSubmitted = new Set(clientSubmissions.map(s => s.exerciseName))
 
+  // No per-client fallback content here on purpose -- a client with no program
+  // assigned yet (or no override loaded) just shows empty, rather than
+  // silently substituting placeholder exercises/notes that were never
+  // actually entered by the therapist.
   const displayExercises = programOverride
-    ? programOverride.exercises.map(ae => {
-        const detail = program.exercises.find(pe => pe.name === ae.name)
-        return {
-          name: ae.name,
-          duration: ae.duration || detail?.duration || '—',
-          instructions: ae.instructions || detail?.instructions || 'Custom exercise assigned by therapist.',
-        }
-      })
-    : program.exercises
+    ? programOverride.exercises.map(ae => ({
+        name: ae.name,
+        duration: ae.duration || '—',
+        instructions: ae.instructions || 'No detailed instructions added yet.',
+      }))
+    : []
   const displayFrequency = programOverride?.frequency ?? client.frequency
-  const displayNotes = programOverride?.notes ?? program.notes
-  const displaySchedule = programOverride?.schedule ?? program.schedule
+  const displayNotes = programOverride?.notes ?? ''
+  const displaySchedule = programOverride?.schedule ?? []
   const completion = Math.round((client.completedThisWeek / displayFrequency) * 100)
 
   function enterEdit() {
-    const source = programOverride?.exercises ?? program?.exercises.map(e => ({ name: e.name, videoUrl: '', instructions: e.instructions, duration: e.duration, frequencyPerWeek: displayFrequency, minDaysBetween: 0 })) ?? []
+    const source = programOverride?.exercises ?? []
     setEditExercises(source.map(ae => {
-      const detail = program?.exercises.find(pe => pe.name === ae.name)
       const live = liveProgram?.exercises.find(pe => pe.template.title === ae.name)
       return {
         name: ae.name,
         videoUrl: ae.videoUrl ?? '',
-        instructions: ae.instructions || detail?.instructions || '',
-        duration: ae.duration || detail?.duration || '',
+        instructions: ae.instructions || '',
+        duration: ae.duration || '',
         frequencyPerWeek: live?.frequency_per_week ?? ae.frequencyPerWeek ?? displayFrequency,
         minDaysBetween: live?.min_days_between ?? ae.minDaysBetween ?? 0,
       }

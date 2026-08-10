@@ -975,7 +975,7 @@ function MessagesScreen({
                   <View style={s.msgApprovedIcon}>
                     <Text style={s.msgApprovedIconText}>✓</Text>
                   </View>
-                  <View>
+                  <View style={s.msgHeaderTextCol}>
                     <Text style={s.msgApprovedTitle}>Submission Approved</Text>
                     <Text style={s.msgApprovedEx}>{msg.exercise_name}</Text>
                   </View>
@@ -998,7 +998,7 @@ function MessagesScreen({
                   <View style={s.msgRejectedIcon}>
                     <Text style={s.msgRejectedIconText}>✕</Text>
                   </View>
-                  <View>
+                  <View style={s.msgHeaderTextCol}>
                     <Text style={s.msgRejectedTitle}>Submission Returned</Text>
                     <Text style={s.msgRejectedEx}>{msg.exercise_name}</Text>
                   </View>
@@ -1712,7 +1712,8 @@ const s = StyleSheet.create({
   // Messages
   msgHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   msgFrom: { fontSize: 13, fontWeight: '700', color: '#1E293B' },
-  msgDate: { fontSize: 11, color: '#94A3B8' },
+  msgDate: { fontSize: 11, color: '#94A3B8', flexShrink: 0, marginLeft: 8 },
+  msgHeaderTextCol: { flexShrink: 1 },
 
   msgNote: {
     backgroundColor: '#FFFBEB', borderRadius: 16, padding: 14,
@@ -1724,7 +1725,7 @@ const s = StyleSheet.create({
     backgroundColor: GREEN_LIGHT, borderRadius: 16, padding: 14,
     borderLeftWidth: 3, borderLeftColor: GREEN, marginBottom: 12,
   },
-  msgApprovedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  msgApprovedRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   msgApprovedIcon: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: GREEN, alignItems: 'center', justifyContent: 'center',
@@ -1739,7 +1740,7 @@ const s = StyleSheet.create({
     borderLeftWidth: 3, borderLeftColor: RED, marginBottom: 12,
   },
   msgRejectedResolved: { opacity: 0.7 },
-  msgRejectedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  msgRejectedRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   msgRejectedIcon: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: RED, alignItems: 'center', justifyContent: 'center',
