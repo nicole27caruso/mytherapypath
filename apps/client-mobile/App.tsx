@@ -111,6 +111,7 @@ type Exercise = {
  weeklyCount: number
  weeklyTarget: number
  dueStatus: DueStatus
+ daysUntilAvailable: number
 }
 
 type Tab = 'home' | 'progress' | 'messages'
@@ -147,7 +148,7 @@ type RejectionItem = Extract<MessageItem, { kind: 'rejected' }>
 
 // ─── Exercise visual/content details (local — UI presentation only) ───────────
 
-type ExerciseDetails = Omit<Exercise, 'id' | 'name' | 'weeklyCount' | 'weeklyTarget' | 'dueStatus'>
+type ExerciseDetails = Omit<Exercise, 'id' | 'name' | 'weeklyCount' | 'weeklyTarget' | 'dueStatus' | 'daysUntilAvailable'>
 
 const EXERCISE_DETAILS: Record<string, ExerciseDetails> = {
   'Pinch and Release': {
@@ -244,6 +245,7 @@ function toExercise(apiEx: {
   weekly_count?: number | null
   weekly_target?: number | null
   due_status?: string | null
+  days_until_available?: number | null
 }, index: number): Exercise {
   const details = EXERCISE_DETAILS[apiEx.title]
   const parsedInstructions = parseInstructions(apiEx.instructions ?? details?.instructions.join('\n'))
@@ -262,6 +264,7 @@ function toExercise(apiEx: {
     weeklyCount: apiEx.weekly_count ?? 0,
     weeklyTarget: apiEx.weekly_target ?? 3,
     dueStatus: (apiEx.due_status === 'complete' || apiEx.due_status === 'past_due' || apiEx.due_status === 'on_track') ? apiEx.due_status : 'on_track',
+    daysUntilAvailable: apiEx.days_until_available ?? 0,
   }
 }
 
@@ -331,6 +334,17 @@ function extractYouTubeId(url: string): string | null {
 function UploadedVideoPlayer({ uri }: { uri: string }) {
   const player = useVideoPlayer(uri, p => { p.loop = false })
   return <VideoView player={player} style={s.videoPlayerInner} nativeControls contentFit="contain" />
+}
+
+// Lets the client actually watch back what they just recorded before
+// submitting, instead of a static "Video captured" placeholder.
+function CapturedVideoPreview({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, p => { p.loop = false })
+  return (
+    <View style={s.previewVideoBox}>
+      <VideoView player={player} style={s.videoPlayerInner} nativeControls contentFit="cover" />
+    </View>
+  )
 }
 
 // react-native-webview doesn't support web, so YouTube embeds use a plain
@@ -520,6 +534,13 @@ function HomeScreen({
                     <Text style={s.revisionBadgeText}>⚠ Past due</Text>
                   </View>
                 )}
+                {ex.daysUntilAvailable > 0 && (
+                  <View style={s.gapBadge}>
+                    <Text style={s.gapBadgeText}>
+                      ⏳ {ex.daysUntilAvailable === 1 ? 'Available tomorrow' : `Available in ${ex.daysUntilAvailable}d`}
+                    </Text>
+                  </View>
+                )}
                 {status === 'approved' && (
                   <View style={s.proofBadge}>
                     <Text style={s.proofBadgeText}>✅ Approved</Text>
@@ -586,6 +607,10 @@ function ExerciseScreen({
 
   const isRejectedPending = status === 'rejected' && !!rejection
   const isWeeklyComplete = exercise.weeklyCount >= exercise.weeklyTarget
+  // A rejection always needs an immediate revision regardless of the gap, and
+  // hitting the weekly target already makes the gap moot -- so it only kicks
+  // in for an exercise that's still open for more submissions this week.
+  const isGapRestricted = !isRejectedPending && !isWeeklyComplete && exercise.daysUntilAvailable > 0
 
   function handleSubmit() {
     if (!preview) return
@@ -665,6 +690,14 @@ function ExerciseScreen({
           <Text style={s.successText}>🎉 Complete for this week!</Text>
           <Text style={s.successNote}>{exercise.weeklyCount}/{exercise.weeklyTarget} done</Text>
         </AnimatedView>
+      ) : isGapRestricted ? (
+        <View style={[s.successBox, { backgroundColor: AMBER_LIGHT }]}>
+          <Text style={[s.successText, { color: AMBER }]}>⏳ Time to rest this one</Text>
+          <Text style={[s.successNote, { color: AMBER }]}>
+            {therapist} wants space between attempts —{' '}
+            {exercise.daysUntilAvailable === 1 ? 'available again tomorrow' : `available again in ${exercise.daysUntilAvailable} days`}
+          </Text>
+        </View>
       ) : (
         <>
           <Text style={s.uploadTitle}>Upload Your Proof</Text>
@@ -675,10 +708,7 @@ function ExerciseScreen({
               {preview.mediaType === 'photo' ? (
                 <Image source={{ uri: preview.uri }} style={s.previewImage} resizeMode="cover" />
               ) : (
-                <View style={[s.previewPlaceholder, { backgroundColor: exercise.color }]}>
-                  <Text style={s.previewPlaceholderIcon}>🎥</Text>
-                  <Text style={s.previewPlaceholderLabel}>Video captured</Text>
-                </View>
+                <CapturedVideoPreview uri={preview.uri} />
               )}
 
               {!submitted ? (
@@ -813,10 +843,7 @@ function RevisionScreen({
           {preview.mediaType === 'photo' ? (
             <Image source={{ uri: preview.uri }} style={s.previewImage} resizeMode="cover" />
           ) : (
-            <View style={[s.previewPlaceholder, { backgroundColor: color }]}>
-              <Text style={s.previewPlaceholderIcon}>🎥</Text>
-              <Text style={s.previewPlaceholderLabel}>Video captured</Text>
-            </View>
+            <CapturedVideoPreview uri={preview.uri} />
           )}
           <View style={s.previewActions}>
             <TouchableOpacity style={s.retakeBtn} onPress={() => setPreview(null)}>
@@ -1554,6 +1581,8 @@ const s = StyleSheet.create({
   pendingBadgeText: { fontSize: 11, fontWeight: '600', color: AMBER },
   revisionBadge: { backgroundColor: RED_LIGHT, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
   revisionBadgeText: { fontSize: 11, fontWeight: '600', color: RED },
+  gapBadge: { backgroundColor: AMBER_LIGHT, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
+  gapBadgeText: { fontSize: 11, fontWeight: '600', color: AMBER },
   exerciseActions: { gap: 6, alignItems: 'flex-end' },
   openBtn: { backgroundColor: PURPLE_LIGHT, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 },
   openBtnDone: { backgroundColor: '#D1FAE5' },
@@ -1609,12 +1638,10 @@ const s = StyleSheet.create({
   uploadBtnEmoji: { fontSize: 28 },
   uploadBtnLabel: { fontSize: 13, fontWeight: '600' },
   previewImage: { width: '100%', height: 220, borderRadius: 16, marginBottom: 12 },
-  previewPlaceholder: {
+  previewVideoBox: {
     width: '100%', height: 220, borderRadius: 16, marginBottom: 12,
-    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden', backgroundColor: '#000',
   },
-  previewPlaceholderIcon: { fontSize: 48 },
-  previewPlaceholderLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 8 },
   previewActions: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   retakeBtn: {
     flex: 1, borderWidth: 1.5, borderColor: '#CBD5E1',

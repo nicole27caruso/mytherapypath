@@ -8,8 +8,9 @@ import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { FrequencyChips } from '@/components/frequency-chips'
+import { GapChips } from '@/components/gap-chips'
 import { api, type ApiTemplate, type ApiProgram } from '@/lib/api'
-import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, AlignLeft, Library, AlertTriangle } from 'lucide-react'
+import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, AlignLeft, Library, AlertTriangle, Hourglass } from 'lucide-react'
 
 const CLIENT_PROGRAMS: Record<string, {
   exercises: { name: string; duration: string; instructions: string }[]
@@ -71,7 +72,7 @@ const CLIENT_PROGRAMS: Record<string, {
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export type ClientProgramState = {
-  exercises: { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number }[]
+  exercises: { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number; minDaysBetween: number }[]
   frequency: number
   notes: string
   schedule: string[]
@@ -95,7 +96,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   const [manualChecked, setManualChecked] = useState<Set<string>>(new Set())
   const [pendingConfirm, setPendingConfirm] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
-  const [editExercises, setEditExercises] = useState<{ name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number }[]>([])
+  const [editExercises, setEditExercises] = useState<{ name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number; minDaysBetween: number }[]>([])
   const [editFrequency, setEditFrequency] = useState(3)
   const [editNotes, setEditNotes] = useState('')
   const [editSchedule, setEditSchedule] = useState<string[]>([])
@@ -139,7 +140,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   const completion = Math.round((client.completedThisWeek / displayFrequency) * 100)
 
   function enterEdit() {
-    const source = programOverride?.exercises ?? program?.exercises.map(e => ({ name: e.name, videoUrl: '', instructions: e.instructions, duration: e.duration, frequencyPerWeek: displayFrequency })) ?? []
+    const source = programOverride?.exercises ?? program?.exercises.map(e => ({ name: e.name, videoUrl: '', instructions: e.instructions, duration: e.duration, frequencyPerWeek: displayFrequency, minDaysBetween: 0 })) ?? []
     setEditExercises(source.map(ae => {
       const detail = program?.exercises.find(pe => pe.name === ae.name)
       const live = liveProgram?.exercises.find(pe => pe.template.title === ae.name)
@@ -149,6 +150,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
         instructions: ae.instructions || detail?.instructions || '',
         duration: ae.duration || detail?.duration || '',
         frequencyPerWeek: live?.frequency_per_week ?? ae.frequencyPerWeek ?? displayFrequency,
+        minDaysBetween: live?.min_days_between ?? ae.minDaysBetween ?? 0,
       }
     }))
     setEditFrequency(displayFrequency)
@@ -166,7 +168,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   function handleSaveEdit() {
     if (!clientId) return
     const pending = newExercise.trim()
-    const finalExercises = pending ? [...editExercises, { name: pending, videoUrl: '', instructions: '', duration: '', frequencyPerWeek: editFrequency }] : editExercises
+    const finalExercises = pending ? [...editExercises, { name: pending, videoUrl: '', instructions: '', duration: '', frequencyPerWeek: editFrequency, minDaysBetween: 0 }] : editExercises
     onSaveProgram(clientId, { exercises: finalExercises, frequency: editFrequency, notes: editNotes, schedule: editSchedule })
     setSaved(true)
     setTimeout(() => { setSaved(false); setIsEditing(false) }, 1200)
@@ -174,7 +176,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
 
   function addEditExercise() {
     if (newExercise.trim()) {
-      setEditExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '', frequencyPerWeek: editFrequency }])
+      setEditExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '', frequencyPerWeek: editFrequency, minDaysBetween: 0 }])
       setNewExercise('')
     }
   }
@@ -188,11 +190,16 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
       instructions: t.instructions ?? '',
       duration: t.duration_minutes ? `${t.duration_minutes} min` : '',
       frequencyPerWeek: editFrequency,
+      minDaysBetween: 0,
     }])
   }
 
   function updateExFrequency(i: number, val: number) {
     setEditExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, frequencyPerWeek: val } : ex))
+  }
+
+  function updateExMinDays(i: number, val: number) {
+    setEditExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, minDaysBetween: val } : ex))
   }
 
   function updateExName(i: number, val: string) {
@@ -337,6 +344,10 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                     <div className="flex items-center gap-2 px-3 py-2 border-t bg-white">
                       <span className="text-xs text-slate-500 flex-shrink-0">Times/week</span>
                       <FrequencyChips size="sm" value={ex.frequencyPerWeek} onChange={val => updateExFrequency(i, val)} />
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-2 border-t bg-white">
+                      <span className="text-xs text-slate-500 flex-shrink-0">Min. spacing</span>
+                      <GapChips size="sm" value={ex.minDaysBetween} onChange={val => updateExMinDays(i, val)} />
                     </div>
                     {(detailsExpanded.has(i) || ex.instructions || ex.duration) && (
                       <div className="border-t bg-white px-3 py-3 space-y-2.5">
@@ -564,6 +575,12 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-red-100 text-red-600 hover:bg-red-100 flex items-center gap-0.5">
                                   <AlertTriangle className="w-2.5 h-2.5" />
                                   Past due
+                                </Badge>
+                              )}
+                              {!!liveEx.days_until_available && liveEx.days_until_available > 0 && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-0.5">
+                                  <Hourglass className="w-2.5 h-2.5" />
+                                  {liveEx.days_until_available === 1 ? 'Resting 1 day' : `Resting ${liveEx.days_until_available} days`}
                                 </Badge>
                               )}
                             </span>

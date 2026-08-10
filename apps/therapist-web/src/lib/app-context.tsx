@@ -6,7 +6,7 @@ import type { NewClient } from '@/components/new-client-modal'
 import type { ClientProgramState } from '@/components/view-program-drawer'
 import { api, THERAPIST_ID, type ApiClient, type ApiProgram, type ApiTemplate, type ApiSubmission } from '@/lib/api'
 
-type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number }
+type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number; minDaysBetween: number }
 
 type LibraryExerciseInput = {
   title: string; description?: string | null; instructions?: string | null;
@@ -76,6 +76,7 @@ function programToState(prog: ApiProgram): ClientProgramState {
         instructions: pe.template.instructions ?? '',
         duration: pe.template.duration_minutes ? `${pe.template.duration_minutes} min` : '',
         frequencyPerWeek: pe.frequency_per_week ?? prog.frequency_per_week,
+        minDaysBetween: pe.min_days_between ?? 0,
       })),
     frequency: prog.frequency_per_week,
     notes: prog.notes ?? '',
@@ -100,6 +101,7 @@ async function persistProgram(
 
   const templateIds: string[] = []
   const exerciseFrequencies: (number | null)[] = []
+  const exerciseMinDays: (number | null)[] = []
   for (const ex of exercises) {
     const key = ex.name.trim().toLowerCase()
     let template = templateByTitle.get(key)
@@ -117,6 +119,7 @@ async function persistProgram(
     }
     templateIds.push(template.id)
     exerciseFrequencies.push(ex.frequencyPerWeek ?? null)
+    exerciseMinDays.push(ex.minDaysBetween || null)
   }
 
   return api.programs.save({
@@ -126,6 +129,7 @@ async function persistProgram(
     schedule_days: schedule.length ? schedule.join(',') : null,
     template_ids: templateIds,
     exercise_frequencies: exerciseFrequencies,
+    exercise_min_days: exerciseMinDays,
   })
 }
 

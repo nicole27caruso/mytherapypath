@@ -6,10 +6,11 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useApp } from '@/lib/app-context'
 import { FrequencyChips } from '@/components/frequency-chips'
+import { GapChips } from '@/components/gap-chips'
 import { X, Plus, Video, Library } from 'lucide-react'
 import type { ApiTemplate } from '@/lib/api'
 
-export type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number }
+export type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number; minDaysBetween: number }
 
 function libraryToExercise(t: ApiTemplate, defaultFrequency: number): ExerciseEntry {
   return {
@@ -18,6 +19,7 @@ function libraryToExercise(t: ApiTemplate, defaultFrequency: number): ExerciseEn
     instructions: t.instructions ?? '',
     duration: t.duration_minutes ? `${t.duration_minutes} min` : '',
     frequencyPerWeek: defaultFrequency,
+    minDaysBetween: 0,
   }
 }
 
@@ -71,13 +73,17 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
 
   function addExercise() {
     if (newExercise.trim()) {
-      setExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '', frequencyPerWeek: frequency }])
+      setExercises(prev => [...prev, { name: newExercise.trim(), videoUrl: '', instructions: '', duration: '', frequencyPerWeek: frequency, minDaysBetween: 0 }])
       setNewExercise('')
     }
   }
 
   function updateExerciseFrequency(i: number, val: number) {
     setExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, frequencyPerWeek: val } : ex))
+  }
+
+  function updateExerciseMinDays(i: number, val: number) {
+    setExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, minDaysBetween: val } : ex))
   }
 
   function removeExercise(i: number) {
@@ -105,7 +111,7 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
   function handleSave() {
     const pending = newExercise.trim()
     const finalExercises = pending
-      ? [...exercises, { name: pending, videoUrl: '', instructions: '', duration: '', frequencyPerWeek: frequency }]
+      ? [...exercises, { name: pending, videoUrl: '', instructions: '', duration: '', frequencyPerWeek: frequency, minDaysBetween: 0 }]
       : exercises
     if (pending) setNewExercise('')
     const resolvedClientId = preselectedClientId || clientId
@@ -224,6 +230,14 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
                       size="sm"
                       value={ex.frequencyPerWeek}
                       onChange={val => updateExerciseFrequency(i, val)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 px-2.5 py-2 border-t bg-white">
+                    <span className="text-xs text-slate-500 flex-shrink-0">Min. spacing</span>
+                    <GapChips
+                      size="sm"
+                      value={ex.minDaysBetween}
+                      onChange={val => updateExerciseMinDays(i, val)}
                     />
                   </div>
                   {(videoExpanded.has(i) || ex.videoUrl) && (

@@ -63,6 +63,8 @@ export type ApiProgramExercise = {
   weekly_count: number | null
   weekly_target: number | null
   due_status: DueStatus | null
+  min_days_between: number | null
+  days_until_available: number | null
 }
 
 export type ApiProgram = {
@@ -200,13 +202,14 @@ export const api = {
       client_id: string; name?: string | null; frequency_per_week: number
       notes?: string | null; schedule_days?: string | null; template_ids: string[]
       exercise_frequencies?: (number | null)[]
+      exercise_min_days?: (number | null)[]
     }) =>
       request<ApiProgram>('/programs', { method: 'POST', body: JSON.stringify(body) }),
 
-    updateExerciseFrequency: (programExerciseId: string, frequencyPerWeek: number | null) =>
+    updateExerciseFrequency: (programExerciseId: string, frequencyPerWeek: number | null, minDaysBetween?: number | null) =>
       request<ApiProgramExercise>(`/programs/exercises/${programExerciseId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ frequency_per_week: frequencyPerWeek }),
+        body: JSON.stringify({ frequency_per_week: frequencyPerWeek, min_days_between: minDaysBetween ?? null }),
       }),
   },
 
