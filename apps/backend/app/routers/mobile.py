@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from pydantic import BaseModel
@@ -242,6 +242,48 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
 
     therapist = db.query(models.Therapist).filter(models.Therapist.id == client.therapist_id).first()
 
+    # "How did last week go" summary -- shown once per week boundary crossed, then
+    # dismissed via /me/ack-weekly-summary. A brand-new client has nothing to
+    # summarize yet, so the first-ever fetch just starts tracking from now instead
+    # of surfacing a summary for a week that predates the feature entirely.
+    today = now.date()
+    weekly_summary = None
+    if client.last_summary_week_start is None:
+        client.last_summary_week_start = today - timedelta(days=today.weekday())
+        db.commit()
+    elif client.last_summary_week_start < week_start.date():
+        prev_week_start = week_start - timedelta(days=7)
+        prev_subs = (
+            db.query(models.Submission)
+            .filter(models.Submission.client_id == client_id)
+            .filter(models.Submission.submitted_at >= prev_week_start)
+            .filter(models.Submission.submitted_at < week_start)
+            .filter(models.Submission.status != "rejected")
+            .all()
+        )
+        prev_counts_by_name = scheduling.bucket_submissions_by_exercise(prev_subs)
+        summary_exercises = []
+        summary_total_target = 0
+        summary_total_count = 0
+        if program:
+            for pe in sorted(program.exercises, key=lambda x: x.order):
+                target = scheduling.effective_target(pe.frequency_per_week, program.frequency_per_week)
+                count = prev_counts_by_name.get(pe.template.title, 0)
+                summary_total_target += target
+                summary_total_count += min(count, target)
+                summary_exercises.append({
+                    "title": pe.template.title,
+                    "count": count,
+                    "target": target,
+                })
+        weekly_summary = {
+            "week_start": prev_week_start.date().isoformat(),
+            "week_end": (week_start - timedelta(days=1)).date().isoformat(),
+            "total_completed": summary_total_count,
+            "total_target": summary_total_target,
+            "exercises": summary_exercises,
+        }
+
     return {
         "client": {
             "name": client.name.split()[0],
@@ -269,7 +311,19 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
         "exercises": exercises,
         "submitted_exercises": submitted_exercises,
         "messages": messages,
+        "weekly_summary": weekly_summary,
     }
+
+
+@router.post("/me/ack-weekly-summary", status_code=204)
+def ack_weekly_summary(
+    client: models.Client = Depends(get_current_client),
+    db: Session = Depends(get_db),
+):
+    """Dismiss the current weekly_summary so /me stops returning it until the next week boundary."""
+    client.last_summary_week_start = scheduling.week_start_utc(datetime.utcnow()).date()
+    db.commit()
+    return None
 
 
 @router.post("/me/submit", status_code=201)

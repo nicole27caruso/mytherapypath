@@ -34,6 +34,7 @@ class Client(Base):
     next_session    = Column(String(50))
     access_code     = Column(String(20), unique=True, index=True)           # code the family enters in the mobile app to log in
     created_at      = Column(DateTime, default=datetime.utcnow)
+    last_summary_week_start = Column(Date, nullable=True)                   # last week-start the client has acknowledged a "how last week went" summary for
 
     submissions     = relationship("Submission", back_populates="client", cascade="all, delete-orphan")
     program         = relationship("Program", back_populates="client", uselist=False, cascade="all, delete-orphan")
