@@ -12,6 +12,7 @@ import {
   ActivityIndicator as RNActivityIndicator,
   TextInput as RNTextInput,
   KeyboardAvoidingView as RNKeyboardAvoidingView,
+  Modal as RNModal,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import Constants from 'expo-constants'
@@ -24,6 +25,7 @@ const Image = RNImage as unknown as ComponentType<any>
 const ActivityIndicator = RNActivityIndicator as unknown as ComponentType<any>
 const TextInput = RNTextInput as unknown as ComponentType<any>
 const KeyboardAvoidingView = RNKeyboardAvoidingView as unknown as ComponentType<any>
+const Modal = RNModal as unknown as ComponentType<any>
 const AnimatedView = Animated.View as unknown as ComponentType<any>
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
@@ -413,6 +415,14 @@ function ExerciseVideoPlayer({ exercise }: { exercise: Exercise }) {
 
 // ─── Home Screen ──────────────────────────────────────────────────────────────
 
+// next_session is stored as a plain "YYYY-MM-DD" string from the therapist-web
+// date picker; fall back to the raw value if it's ever free text instead.
+function formatNextSession(raw: string): string {
+  const d = new Date(raw + 'T00:00:00')
+  if (isNaN(d.getTime())) return raw
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+}
+
 function HomeScreen({
   exercises,
   messages,
@@ -485,6 +495,16 @@ function HomeScreen({
           </AnimatedView>
         )}
       </View>
+
+      {!!clientInfo.nextSession && clientInfo.nextSession !== '—' && (
+        <View style={s.nextSessionCard}>
+          <Text style={s.nextSessionIcon}>📅</Text>
+          <View style={s.nextSessionTextCol}>
+            <Text style={s.nextSessionLabel}>Next Appointment</Text>
+            <Text style={s.nextSessionDate}>{formatNextSession(clientInfo.nextSession)}</Text>
+          </View>
+        </View>
+      )}
 
       {pendingRejections.length > 0 && (
         <View style={s.attentionSection}>
@@ -936,6 +956,62 @@ function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; cli
   )
 }
 
+// ─── Weekly Summary Modal ──────────────────────────────────────────────────────
+
+type WeeklySummaryExercise = { title: string; count: number; target: number }
+type WeeklySummaryData = {
+  weekStart: string
+  weekEnd: string
+  totalCompleted: number
+  totalTarget: number
+  exercises: WeeklySummaryExercise[]
+}
+
+function formatSummaryDate(iso: string): string {
+  const d = new Date(iso + 'T00:00:00')
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+// Shown once per week boundary crossed, dismissed via onDismiss (which acks it
+// server-side too) so it won't reappear until the next week actually ends.
+function WeeklySummaryModal({ summary, onDismiss }: { summary: WeeklySummaryData; onDismiss: () => void }) {
+  const allDone = summary.totalTarget > 0 && summary.totalCompleted >= summary.totalTarget
+  return (
+    <Modal visible animationType="fade" transparent statusBarTranslucent>
+      <View style={s.summaryOverlay}>
+        <View style={s.summaryCard}>
+          <Text style={s.summaryEmoji}>{allDone ? '🎉' : '📅'}</Text>
+          <Text style={s.summaryTitle}>Last Week's Recap</Text>
+          <Text style={s.summarySub}>{formatSummaryDate(summary.weekStart)} – {formatSummaryDate(summary.weekEnd)}</Text>
+
+          <View style={s.summaryStatBox}>
+            <Text style={s.summaryStatBig}>{summary.totalCompleted}/{summary.totalTarget}</Text>
+            <Text style={s.summaryStatLabel}>exercises completed{allDone ? ' — great work!' : ''}</Text>
+          </View>
+
+          {summary.exercises.length > 0 && (
+            <ScrollView style={s.summaryExList} showsVerticalScrollIndicator={false}>
+              {summary.exercises.map(ex => (
+                <View key={ex.title} style={s.summaryExRow}>
+                  <Text style={s.summaryExName} numberOfLines={1}>{ex.title}</Text>
+                  <Text style={[s.summaryExCount, ex.count >= ex.target && s.summaryExCountDone]}>
+                    {ex.count}/{ex.target}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          <TouchableOpacity style={s.summaryBtn} onPress={onDismiss}>
+            <Text style={s.summaryBtnText}>Start This Week →</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
 // ─── Messages Screen ──────────────────────────────────────────────────────────
 
 function MessagesScreen({
@@ -1163,6 +1239,7 @@ export default function App() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [messages, setMessages] = useState<MessageItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [weeklySummary, setWeeklySummary] = useState<WeeklySummaryData | null>(null)
 
   async function loadDashboard() {
     if (!token) return
@@ -1198,6 +1275,15 @@ export default function App() {
       })
       setExercises(loadedExercises)
       setMessages(data.messages as MessageItem[])
+      setWeeklySummary(data.weekly_summary ? {
+        weekStart: data.weekly_summary.week_start,
+        weekEnd: data.weekly_summary.week_end,
+        totalCompleted: data.weekly_summary.total_completed ?? 0,
+        totalTarget: data.weekly_summary.total_target ?? 0,
+        exercises: (data.weekly_summary.exercises ?? []).map((e: any) => ({
+          title: e.title, count: e.count ?? 0, target: e.target ?? 0,
+        })),
+      } : null)
       // "Completed" means proof was submitted and hasn't been rejected —
       // a rejected exercise falls back into "needs attention" until revised.
       setCompleted(new Set(
@@ -1225,6 +1311,18 @@ export default function App() {
       setIsLoading(false)
       setAuthChecked(true)
     }
+  }
+
+  // Dismiss immediately for a snappy UI; the ack call runs in the background
+  // so a lost connection doesn't trap the user behind the modal — worst case
+  // they see the same summary again next load, which is harmless.
+  function handleDismissSummary() {
+    setWeeklySummary(null)
+    if (!token) return
+    fetch(`${API_BASE}/mobile/me/ack-weekly-summary`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(err => console.error('Failed to ack weekly summary:', err))
   }
 
   async function handleLogin(accessCode: string) {
@@ -1265,6 +1363,7 @@ export default function App() {
     setCompleted(new Set())
     setSubmissionStatus({})
     setResubmitted(new Set())
+    setWeeklySummary(null)
     setActiveTab('home')
     setSelectedEx(null)
     setSelectedRevision(null)
@@ -1449,6 +1548,8 @@ export default function App() {
 
         <TabBar active={activeTab} pendingRevisions={pendingRevisions} onChange={handleTabChange} />
       </View>
+
+      {weeklySummary && <WeeklySummaryModal summary={weeklySummary} onDismiss={handleDismissSummary} />}
     </SafeAreaProvider>
   )
 }
@@ -1535,6 +1636,15 @@ const s = StyleSheet.create({
   progressBar: { height: 8, backgroundColor: '#E2E8F0', borderRadius: 4, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: PURPLE, borderRadius: 4 },
   allDone: { marginTop: 10, textAlign: 'center', color: '#059669', fontWeight: '600', fontSize: 13 },
+  nextSessionCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff',
+    borderRadius: 16, padding: 14, marginBottom: 20,
+    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
+  },
+  nextSessionIcon: { fontSize: 22 },
+  nextSessionTextCol: { flexShrink: 1 },
+  nextSessionLabel: { fontSize: 11, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.4 },
+  nextSessionDate: { fontSize: 15, fontWeight: '700', color: '#1E293B', marginTop: 2 },
 
   // Needs Attention
   attentionSection: { marginBottom: 20 },
@@ -1654,6 +1764,22 @@ const s = StyleSheet.create({
   successBox: { borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
   successText: { fontSize: 14, fontWeight: '600', color: '#059669', textAlign: 'center' },
   successNote: { fontSize: 12, color: '#065F46', textAlign: 'center', marginTop: 6, fontStyle: 'italic' },
+
+  summaryOverlay: { flex: 1, backgroundColor: 'rgba(15,20,30,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  summaryCard: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 380, maxHeight: '80%', alignItems: 'center' },
+  summaryEmoji: { fontSize: 40, marginBottom: 8 },
+  summaryTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B', textAlign: 'center' },
+  summarySub: { fontSize: 13, color: '#94A3B8', marginTop: 2, marginBottom: 18 },
+  summaryStatBox: { alignItems: 'center', backgroundColor: PURPLE_LIGHT, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 20, width: '100%', marginBottom: 16 },
+  summaryStatBig: { fontSize: 30, fontWeight: '800', color: PURPLE },
+  summaryStatLabel: { fontSize: 13, color: '#4338CA', fontWeight: '600', marginTop: 2, textAlign: 'center' },
+  summaryExList: { width: '100%', maxHeight: 180, marginBottom: 20 },
+  summaryExRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  summaryExName: { fontSize: 13, color: '#334155', flex: 1, marginRight: 10 },
+  summaryExCount: { fontSize: 13, fontWeight: '700', color: '#94A3B8' },
+  summaryExCountDone: { color: GREEN },
+  summaryBtn: { backgroundColor: PURPLE, borderRadius: 14, paddingVertical: 14, width: '100%', alignItems: 'center' },
+  summaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   // Revision notice
   rejNoticeBox: {

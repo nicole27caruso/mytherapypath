@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useApp } from '@/lib/app-context'
+import { useApp, programTarget } from '@/lib/app-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -80,7 +80,13 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   const displayFrequency = programOverride?.frequency ?? client.frequency
   const displayNotes = programOverride?.notes ?? ''
   const displaySchedule = programOverride?.schedule ?? []
-  const completion = Math.round((client.completedThisWeek / displayFrequency) * 100)
+  // The program-level frequency is just the default applied to new exercises --
+  // the real weekly target is the sum of each exercise's own target, which can
+  // (and often does) diverge from that default once per-exercise targets are set.
+  // Using the flat default as the completion denominator here understated the
+  // real target and could push the displayed percentage over 100%.
+  const weeklyTarget = programTarget(programOverride, client.frequency)
+  const completion = Math.round((client.completedThisWeek / weeklyTarget) * 100)
 
   function enterEdit() {
     const source = programOverride?.exercises ?? []
@@ -433,7 +439,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
             <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
               <h3 className="font-semibold text-teal-900">{client.program}</h3>
               <div className="flex items-center gap-4 mt-2 text-xs text-teal-700">
-                <span className="flex items-center gap-1"><Repeat2 className="w-3 h-3" />{displayFrequency}x per week</span>
+                <span className="flex items-center gap-1"><Repeat2 className="w-3 h-3" />{weeklyTarget}x per week</span>
                 <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Next: {client.nextSession}</span>
               </div>
             </div>
@@ -443,7 +449,7 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">This Week</p>
               <span className={`text-xs font-medium ${completion === 100 ? 'text-emerald-600' : completion >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
-                {client.completedThisWeek} of {displayFrequency} sessions · {completion}%
+                {client.completedThisWeek} of {weeklyTarget} sessions · {completion}%
               </span>
             </div>
             <Progress value={completion} className={`h-2 ${completion === 100 ? '[&>div]:bg-emerald-500' : completion >= 50 ? '[&>div]:bg-amber-500' : '[&>div]:bg-red-400'}`} />
