@@ -241,30 +241,44 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
             <div>
               <label className="text-xs font-medium text-slate-400 uppercase tracking-wide block mb-3">Exercises</label>
 
-              {library.length > 0 && (
-                <div className="mb-4 p-3 rounded-lg border border-dashed bg-slate-50">
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-2">
-                    <Library className="w-3.5 h-3.5" />
-                    Add from library
-                  </label>
-                  <Select value="" onValueChange={value => value && addFromLibrary(value)}>
-                    <SelectTrigger className="h-8 text-xs bg-white">
-                      <SelectValue placeholder="Search the exercise library..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[...libraryByCategory.entries()].map(([category, items]) => (
-                        <SelectGroup key={category}>
-                          <SelectLabel>{category}</SelectLabel>
-                          {items.map(t => (
-                            <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-slate-400 mt-1.5">Adds the exercise to the list below. You can also type a one-off exercise name manually.</p>
+              <div className="mb-4 p-3 rounded-lg border border-dashed bg-slate-50">
+                {library.length > 0 && (
+                  <>
+                    <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-2">
+                      <Library className="w-3.5 h-3.5" />
+                      Add from library
+                    </label>
+                    <Select value="" onValueChange={value => value && addFromLibrary(value)}>
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue placeholder="Search the exercise library..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[...libraryByCategory.entries()].map(([category, items]) => (
+                          <SelectGroup key={category}>
+                            <SelectLabel>{category}</SelectLabel>
+                            {items.map(t => (
+                              <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-400 mt-1.5">Adds the exercise to the list below.</p>
+                  </>
+                )}
+                <div className={`flex gap-2 ${library.length > 0 ? 'mt-2' : ''}`}>
+                  <Input
+                    placeholder={library.length > 0 ? '...or type a one-off exercise name' : 'Add an exercise...'}
+                    value={newExercise}
+                    onChange={e => setNewExercise(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addEditExercise()}
+                    className="text-sm h-8 bg-white"
+                  />
+                  <Button size="sm" variant="outline" onClick={addEditExercise}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
                 </div>
-              )}
+              </div>
 
               <div className="space-y-2">
                 {editExercises.map((ex, i) => (
@@ -354,18 +368,6 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                     )}
                   </div>
                 ))}
-              </div>
-              <div className="flex gap-2 mt-3">
-                <Input
-                  placeholder="Add an exercise..."
-                  value={newExercise}
-                  onChange={e => setNewExercise(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addEditExercise()}
-                  className="text-sm"
-                />
-                <Button size="sm" variant="outline" onClick={addEditExercise}>
-                  <Plus className="w-4 h-4" />
-                </Button>
               </div>
             </div>
 

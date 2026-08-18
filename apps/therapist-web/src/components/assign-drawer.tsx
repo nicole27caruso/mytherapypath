@@ -192,7 +192,19 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-slate-400 mt-1.5">Adds the exercise to the list below. You can also type a one-off exercise name manually.</p>
+            <p className="text-xs text-slate-400 mt-1.5">Adds the exercise to the list below.</p>
+            <div className="flex gap-2 mt-2">
+              <Input
+                placeholder="...or type a one-off exercise name"
+                value={newExercise}
+                onChange={e => setNewExercise(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addExercise()}
+                className="text-sm"
+              />
+              <Button size="sm" variant="outline" onClick={addExercise}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
           <div>
@@ -265,18 +277,6 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
                   )}
                 </div>
               ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Add an exercise..."
-                value={newExercise}
-                onChange={e => setNewExercise(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addExercise()}
-                className="text-sm"
-              />
-              <Button size="sm" variant="outline" onClick={addExercise}>
-                <Plus className="w-4 h-4" />
-              </Button>
             </div>
           </div>
 
