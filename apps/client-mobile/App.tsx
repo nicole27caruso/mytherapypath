@@ -114,6 +114,7 @@ type Exercise = {
  weeklyTarget: number
  dueStatus: DueStatus
  daysUntilAvailable: number
+ weekStatus?: 'pending' | 'approved' | 'rejected'
 }
 
 type Tab = 'home' | 'progress' | 'messages'
@@ -248,6 +249,7 @@ function toExercise(apiEx: {
   weekly_target?: number | null
   due_status?: string | null
   days_until_available?: number | null
+  status?: string | null
 }, index: number): Exercise {
   const details = EXERCISE_DETAILS[apiEx.title]
   const parsedInstructions = parseInstructions(apiEx.instructions ?? details?.instructions.join('\n'))
@@ -267,6 +269,7 @@ function toExercise(apiEx: {
     weeklyTarget: apiEx.weekly_target ?? 3,
     dueStatus: (apiEx.due_status === 'complete' || apiEx.due_status === 'past_due' || apiEx.due_status === 'on_track') ? apiEx.due_status : 'on_track',
     daysUntilAvailable: apiEx.days_until_available ?? 0,
+    weekStatus: (apiEx.status === 'pending' || apiEx.status === 'approved' || apiEx.status === 'rejected') ? apiEx.status : undefined,
   }
 }
 
@@ -529,7 +532,7 @@ function HomeScreen({
 
       {exercises.map((ex, index) => {
         const isDone = ex.weeklyCount >= ex.weeklyTarget
-        const status = submissionStatus[ex.id]
+        const status = ex.weekStatus
         const bounceAnim = getBounceAnim(ex.id)
         return (
           <View key={ex.id} style={[s.exerciseCard, isDone && s.exerciseCardDone]}>

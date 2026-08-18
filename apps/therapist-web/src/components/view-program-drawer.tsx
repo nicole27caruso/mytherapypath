@@ -14,6 +14,15 @@ import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus,
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+// Matches the backend's Monday-Sunday UTC week boundary (scheduling.week_start_utc)
+// so "this week" means the same thing on the therapist and client sides.
+function mondayOfCurrentWeek(): string {
+  const now = new Date()
+  const diffToMonday = (now.getUTCDay() + 6) % 7
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diffToMonday))
+  return monday.toISOString().split('T')[0]
+}
+
 export type ClientProgramState = {
   exercises: { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number; minDaysBetween: number }[]
   frequency: number
@@ -64,7 +73,12 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
   if (!open || !client) return null
 
   const clientSubmissions = submissionList.filter(s => s.clientId === clientId)
-  const proofSubmitted = new Set(clientSubmissions.map(s => s.exerciseName))
+  // "Proof submitted" must reset each week like the mobile app's badges do --
+  // otherwise an approval from a prior week keeps showing as done forever.
+  const weekStart = mondayOfCurrentWeek()
+  const proofSubmitted = new Set(
+    clientSubmissions.filter(s => s.date >= weekStart).map(s => s.exerciseName)
+  )
 
   // No per-client fallback content here on purpose -- a client with no program
   // assigned yet (or no override loaded) just shows empty, rather than

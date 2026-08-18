@@ -163,6 +163,20 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
     weekly_counts_by_name = scheduling.bucket_submissions_by_exercise(week_subs)
     iso_weekday = now.isoweekday()
 
+    # Status badge on each exercise card must reflect only THIS week's most recent
+    # submission -- unlike weekly_count above, this needs every status (including
+    # rejected) so an unrevised rejection from this week still shows correctly.
+    week_status_by_name = {}
+    for sub in (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id)
+        .filter(models.Submission.submitted_at >= week_start)
+        .order_by(desc(models.Submission.submitted_at))
+        .all()
+    ):
+        if sub.exercise_name not in week_status_by_name:
+            week_status_by_name[sub.exercise_name] = sub.status
+
     # All-time, non-rejected submissions per exercise -- a rejection shouldn't
     # block an immediate revision, so it's excluded from the spacing gap the
     # same way it's already excluded from the weekly count above.
@@ -202,6 +216,7 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
                 "due_status": scheduling.compute_due_status(weekly_count, weekly_target, iso_weekday),
                 "min_days_between": pe.min_days_between,
                 "days_until_available": days_until_available,
+                "status": week_status_by_name.get(pe.template.title),
             })
 
     latest_submissions = {}
