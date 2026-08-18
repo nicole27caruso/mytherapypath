@@ -45,8 +45,8 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
     const key = t.category ?? 'Other'
     libraryByCategory.set(key, [...(libraryByCategory.get(key) ?? []), t])
   }
-  const [manualChecked, setManualChecked] = useState<Set<string>>(new Set())
   const [pendingConfirm, setPendingConfirm] = useState<string | null>(null)
+  const [loggingSession, setLoggingSession] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editExercises, setEditExercises] = useState<{ name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number; minDaysBetween: number }[]>([])
   const [editFrequency, setEditFrequency] = useState(3)
@@ -204,14 +204,17 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
     setEditSchedule(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
   }
 
-  function confirmMarkDone(name: string) {
-    setManualChecked(prev => new Set([...prev, name]))
+  async function confirmMarkDone(name: string, count: number) {
     setPendingConfirm(null)
-    if (clientId) logSession(clientId, name)
-  }
-
-  function unmarkDone(name: string) {
-    setManualChecked(prev => { const next = new Set(prev); next.delete(name); return next })
+    if (!clientId) return
+    setLoggingSession(true)
+    try {
+      await logSession(clientId, name, count)
+      const fresh = await api.programs.get(clientId)
+      setLiveProgram(fresh)
+    } finally {
+      setLoggingSession(false)
+    }
   }
 
   // ── EDIT MODE ──────────────────────────────────────────────────────────────
@@ -481,9 +484,12 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
             <div className="space-y-3">
               {displayExercises.map(ex => {
                 const hasProof = proofSubmitted.has(ex.name)
-                const manualDone = manualChecked.has(ex.name)
                 const isConfirming = pendingConfirm === ex.name
                 const liveEx = liveProgram?.exercises.find(pe => pe.template.title === ex.name)
+                const weeklyCount = liveEx?.weekly_count ?? 0
+                const weeklyTarget = liveEx?.weekly_target ?? 0
+                const weekComplete = weeklyTarget > 0 && weeklyCount >= weeklyTarget
+                const remaining = Math.max(1, weeklyTarget - weeklyCount)
 
                 if (isConfirming) {
                   return (
@@ -492,11 +498,26 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                       <p className="text-xs text-teal-700 mb-3">
                         Confirm that <span className="font-semibold">{ex.name}</span>{' '}was completed during today&apos;s in-person session.
                       </p>
-                      <div className="flex gap-2">
-                        <button onClick={() => confirmMarkDone(ex.name)} className="flex-1 text-xs font-medium py-1.5 rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
-                          Yes, mark done
+                      <div className="flex flex-col gap-2">
+                        <button
+                          disabled={loggingSession}
+                          onClick={() => confirmMarkDone(ex.name, 1)}
+                          className="text-xs font-medium py-1.5 rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors disabled:opacity-50"
+                        >
+                          Log this session only (+1 — {weeklyCount + 1}/{weeklyTarget || '—'} this week)
                         </button>
-                        <button onClick={() => setPendingConfirm(null)} className="flex-1 text-xs font-medium py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors">
+                        <button
+                          disabled={loggingSession}
+                          onClick={() => confirmMarkDone(ex.name, remaining)}
+                          className="text-xs font-medium py-1.5 rounded-lg bg-teal-100 text-teal-800 hover:bg-teal-200 transition-colors disabled:opacity-50"
+                        >
+                          Override — mark full week complete ({weeklyTarget || '—'}/{weeklyTarget || '—'})
+                        </button>
+                        <button
+                          disabled={loggingSession}
+                          onClick={() => setPendingConfirm(null)}
+                          className="text-xs font-medium py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors"
+                        >
                           Cancel
                         </button>
                       </div>
@@ -508,28 +529,25 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                   <div
                     key={ex.name}
                     onClick={() => {
-                      if (hasProof) return
-                      if (manualDone) { unmarkDone(ex.name); return }
+                      if (hasProof || weekComplete) return
                       setPendingConfirm(ex.name)
                     }}
                     className={`rounded-xl border p-4 transition-colors ${
-                      hasProof ? 'bg-emerald-50 border-emerald-200 cursor-default'
-                      : manualDone ? 'bg-teal-50 border-teal-200 hover:bg-teal-100 cursor-pointer'
+                      hasProof || weekComplete ? 'bg-emerald-50 border-emerald-200 cursor-default'
                       : 'bg-white border-slate-200 hover:bg-slate-50 cursor-pointer'
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      {hasProof ? <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                        : manualDone ? <CheckCircle2 className="w-5 h-5 text-teal-500 flex-shrink-0 mt-0.5" />
+                      {hasProof || weekComplete ? <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
                         : <Circle className="w-5 h-5 text-slate-300 flex-shrink-0 mt-0.5" />}
                       <div>
-                        <p className={`text-sm font-medium ${hasProof ? 'text-emerald-800' : manualDone ? 'text-teal-800' : 'text-slate-800'}`}>{ex.name}</p>
+                        <p className={`text-sm font-medium ${hasProof || weekComplete ? 'text-emerald-800' : 'text-slate-800'}`}>{ex.name}</p>
                         <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{ex.instructions}</p>
                         <div className="flex items-center gap-1 mt-2 text-xs text-slate-400 flex-wrap">
                           <Clock className="w-3 h-3" />
                           {ex.duration}
                           {hasProof && <span className="ml-2 text-emerald-600 font-medium">· Proof submitted</span>}
-                          {manualDone && !hasProof && <span className="ml-2 text-teal-600 font-medium">· Marked done — click to undo</span>}
+                          {weekComplete && !hasProof && <span className="ml-2 text-emerald-600 font-medium">· Complete this week</span>}
                           {liveEx?.weekly_target != null && (
                             <span className="ml-2 flex items-center gap-1">
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-600 hover:bg-slate-100">

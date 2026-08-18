@@ -139,7 +139,7 @@ export const api = {
     }>) =>
       request<ApiClient>(`/clients/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
-    logSession: (clientId: string, body: { exercise_name: string; note?: string | null }) =>
+    logSession: (clientId: string, body: { exercise_name: string; note?: string | null; count?: number }) =>
       request<ApiClinicSession>(`/clients/${clientId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
 
     sessions: (clientId: string) =>

@@ -31,7 +31,15 @@ def get_program(client_id: str, db: Session = Depends(get_db)):
         .filter(models.Submission.status != "rejected")
         .all()
     )
+    week_sessions = (
+        db.query(models.ClinicSession)
+        .filter(models.ClinicSession.client_id == client_id)
+        .filter(models.ClinicSession.session_date >= week_start.date())
+        .all()
+    )
     weekly_counts_by_name = scheduling.bucket_submissions_by_exercise(week_subs)
+    for name, count in scheduling.bucket_submissions_by_exercise(week_sessions).items():
+        weekly_counts_by_name[name] = weekly_counts_by_name.get(name, 0) + count
     iso_weekday = now.isoweekday()
 
     all_nonrejected_subs = (
@@ -137,8 +145,15 @@ def update_program_exercise_frequency(
         .filter(models.Submission.exercise_name == pe.template.title)
         .all()
     )
+    week_sessions = (
+        db.query(models.ClinicSession)
+        .filter(models.ClinicSession.client_id == prog.client_id)
+        .filter(models.ClinicSession.session_date >= scheduling.week_start_utc(now).date())
+        .filter(models.ClinicSession.exercise_name == pe.template.title)
+        .all()
+    )
     target = scheduling.effective_target(pe.frequency_per_week, prog.frequency_per_week)
-    count = len(week_subs)
+    count = len(week_subs) + len(week_sessions)
     pe.weekly_target = target
     pe.weekly_count = count
     pe.due_status = scheduling.compute_due_status(count, target, now.isoweekday())

@@ -160,7 +160,18 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
         .filter(models.Submission.status != "rejected")
         .all()
     )
+    # Exercises the therapist logged as done in-session count toward the same weekly
+    # target the client sees -- otherwise a client who did it in clinic would still
+    # look "behind" on their own app.
+    week_sessions = (
+        db.query(models.ClinicSession)
+        .filter(models.ClinicSession.client_id == client_id)
+        .filter(models.ClinicSession.session_date >= week_start.date())
+        .all()
+    )
     weekly_counts_by_name = scheduling.bucket_submissions_by_exercise(week_subs)
+    for name, count in scheduling.bucket_submissions_by_exercise(week_sessions).items():
+        weekly_counts_by_name[name] = weekly_counts_by_name.get(name, 0) + count
     iso_weekday = now.isoweekday()
 
     # Status badge on each exercise card must reflect only THIS week's most recent

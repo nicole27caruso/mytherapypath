@@ -33,7 +33,7 @@ type AppContextValue = {
   toggleClientStatus: (id: string) => Promise<void>
   handleAssign: (clientId: string, exercises: ExerciseEntry[], frequency: number, notes: string) => void
   handleSaveProgram: (clientId: string, state: ClientProgramState) => void
-  logSession: (clientId: string, exerciseName: string) => Promise<void>
+  logSession: (clientId: string, exerciseName: string, count?: number) => Promise<void>
   signOff: (id: string, note: string) => Promise<void>
   reject: (id: string, note: string) => Promise<void>
 }
@@ -283,9 +283,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .catch(err => console.error('Failed to save program:', err))
   }
 
-  async function logSession(clientId: string, exerciseName: string) {
+  async function logSession(clientId: string, exerciseName: string, count = 1) {
     try {
-      await api.clients.logSession(clientId, { exercise_name: exerciseName })
+      await api.clients.logSession(clientId, { exercise_name: exerciseName, count })
+      // completed_this_week is computed server-side (list_clients), not a field
+      // this row can be optimistically patched -- refetch to pick up the change.
+      const rawClients = await api.clients.list()
+      setClientList(rawClients.map(toNewClient))
     } catch (err) {
       console.error('Failed to log clinic session:', err)
     }

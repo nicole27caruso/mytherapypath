@@ -32,8 +32,16 @@ def list_clients(therapist_id: str, db: Session = Depends(get_db)):
         .filter(models.Submission.status != "rejected")
         .all()
     )
+    week_sessions = (
+        db.query(models.ClinicSession)
+        .filter(models.ClinicSession.client_id.in_([c.id for c in clients]))
+        .filter(models.ClinicSession.session_date >= week_start.date())
+        .all()
+    )
     subs_by_client: dict[str, list] = {}
     for s in week_subs:
+        subs_by_client.setdefault(s.client_id, []).append(s)
+    for s in week_sessions:
         subs_by_client.setdefault(s.client_id, []).append(s)
 
     for c in clients:
@@ -117,9 +125,14 @@ def list_notes(client_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{client_id}/sessions", response_model=schemas.ClinicSessionOut, status_code=201)
 def log_clinic_session(client_id: str, body: schemas.ClinicSessionCreate, db: Session = Depends(get_db)):
-    """Log an exercise as completed during an in-person clinic visit (as opposed to a remote proof submission)."""
-    session = models.ClinicSession(client_id=client_id, **body.model_dump())
-    db.add(session)
+    """Log an exercise as completed during an in-person clinic visit (as opposed to a remote proof
+    submission). count > 1 backfills multiple occurrences at once -- e.g. a therapist overriding a
+    whole week's target as done in one click, rather than logging each rep separately."""
+    fields = body.model_dump(exclude={"count"})
+    session = None
+    for _ in range(body.count):
+        session = models.ClinicSession(client_id=client_id, **fields)
+        db.add(session)
     db.commit()
     db.refresh(session)
     return session

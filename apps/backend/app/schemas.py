@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime, date
 
@@ -173,6 +173,7 @@ class ClientDetail(ClientOut):
 class ClinicSessionCreate(BaseModel):
     exercise_name: str
     note: Optional[str] = None
+    count: int = Field(default=1, ge=1, le=30)
 
 class ClinicSessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
