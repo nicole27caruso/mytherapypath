@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { useApp } from '@/lib/app-context'
 import { FrequencyChips } from '@/components/frequency-chips'
 import { GapChips } from '@/components/gap-chips'
-import { X, Plus, Video, Library } from 'lucide-react'
+import { X, Plus, Video, Library, Info } from 'lucide-react'
 import type { ApiTemplate } from '@/lib/api'
 
 export type ExerciseEntry = { name: string; videoUrl: string; instructions: string; duration: string; frequencyPerWeek: number; minDaysBetween: number }
@@ -208,6 +208,14 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
           </div>
 
           <div>
+            <label className="text-sm font-medium text-slate-700 block mb-2">
+              Default frequency for new exercises —{' '}
+              <span className="text-teal-600 font-semibold">{frequency}x per week</span>
+            </label>
+            <FrequencyChips value={frequency} onChange={setFrequency} />
+          </div>
+
+          <div>
             <label className="text-sm font-medium text-slate-700 block mb-2">Exercises</label>
             <div className="space-y-2 mb-3">
               {exercises.length === 0 && (
@@ -245,7 +253,13 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
                     />
                   </div>
                   <div className="flex items-center gap-2 px-2.5 py-2 border-t bg-white">
-                    <span className="text-xs text-slate-500 flex-shrink-0">Min. spacing</span>
+                    <span
+                      title="Minimum rest days before this exercise can be logged again — a per-exercise pacing rule, separate from any overall weekly schedule."
+                      className="flex items-center gap-1 text-xs text-slate-500 flex-shrink-0 cursor-help"
+                    >
+                      Min. spacing
+                      <Info className="w-3 h-3 text-slate-400" />
+                    </span>
                     <GapChips
                       size="sm"
                       value={ex.minDaysBetween}
@@ -278,17 +292,6 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
                 </div>
               ))}
             </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700 block mb-3">
-              Default frequency for new exercises —{' '}
-              <span className="text-teal-600 font-semibold">{frequency}x per week</span>
-            </label>
-            <p className="text-xs text-slate-400 mb-3">
-              Each exercise can have its own weekly target (set per-row above) — this is just the starting value applied when you add a new one.
-            </p>
-            <FrequencyChips value={frequency} onChange={setFrequency} />
           </div>
 
           <div>

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { FrequencyChips } from '@/components/frequency-chips'
 import { GapChips } from '@/components/gap-chips'
 import { api, type ApiTemplate, type ApiProgram } from '@/lib/api'
-import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, AlignLeft, Library, AlertTriangle, Hourglass } from 'lucide-react'
+import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, AlignLeft, Library, AlertTriangle, Hourglass, Info } from 'lucide-react'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -283,6 +283,13 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                 </div>
               </div>
 
+              <div className="mb-4">
+                <label className="text-xs font-medium text-slate-500 block mb-1.5">
+                  Default frequency for new exercises — <span className="text-teal-600 font-semibold">{editFrequency}x per week</span>
+                </label>
+                <FrequencyChips value={editFrequency} onChange={setEditFrequency} />
+              </div>
+
               <div className="space-y-2">
                 {editExercises.map((ex, i) => (
                   <div key={i} className="border rounded-lg overflow-hidden">
@@ -325,7 +332,13 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                       <FrequencyChips size="sm" value={ex.frequencyPerWeek} onChange={val => updateExFrequency(i, val)} />
                     </div>
                     <div className="flex items-center gap-2 px-3 py-2 border-t bg-white">
-                      <span className="text-xs text-slate-500 flex-shrink-0">Min. spacing</span>
+                      <span
+                        title="Minimum rest days before THIS exercise can be logged again — a per-exercise pacing rule. Separate from Schedule Days below, which is the general days-per-week the whole program runs on."
+                        className="flex items-center gap-1 text-xs text-slate-500 flex-shrink-0 cursor-help"
+                      >
+                        Min. spacing
+                        <Info className="w-3 h-3 text-slate-400" />
+                      </span>
                       <GapChips size="sm" value={ex.minDaysBetween} onChange={val => updateExMinDays(i, val)} />
                     </div>
                     {(detailsExpanded.has(i) || ex.instructions || ex.duration) && (
@@ -375,17 +388,10 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wide block mb-3">
-                Default frequency for new exercises — <span className="text-teal-600 font-semibold">{editFrequency}x per week</span>
-              </label>
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wide block mb-1.5">Schedule Days</label>
               <p className="text-xs text-slate-400 mb-3">
-                Each exercise above has its own weekly target — this is just the starting value applied when you add a new one.
+                Which days per week this client&apos;s program generally runs — separate from each exercise&apos;s own Min. spacing rest rule above.
               </p>
-              <FrequencyChips value={editFrequency} onChange={setEditFrequency} />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wide block mb-3">Schedule Days</label>
               <div className="flex gap-2 flex-wrap">
                 {DAYS.map(day => (
                   <button
@@ -498,6 +504,12 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                       <p className="text-xs text-teal-700 mb-3">
                         Confirm that <span className="font-semibold">{ex.name}</span>{' '}was completed during today&apos;s in-person session.
                       </p>
+                      {!!liveEx?.days_until_available && liveEx.days_until_available > 0 && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-3 flex items-center gap-1.5">
+                          <Hourglass className="w-3 h-3 flex-shrink-0" />
+                          Still resting ({liveEx.days_until_available === 1 ? '1 day' : `${liveEx.days_until_available} days`} left on Min. spacing) — logging here overrides that rest rule.
+                        </p>
+                      )}
                       <div className="flex flex-col gap-2">
                         <button
                           disabled={loggingSession}
