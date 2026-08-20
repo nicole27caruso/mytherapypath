@@ -1,10 +1,12 @@
 """Shared per-exercise weekly-progress helpers, used by the mobile and programs routers.
 
-Weekly targets are a plain count (no specific days assigned) — "past due" is a pacing
-heuristic (behind an even 1/7-per-day expectation for the days elapsed so far), not a
-missed-a-specific-day check.
+Weekly targets are a plain count (no specific days assigned) — "past due" means the
+target is no longer mathematically reachable by the end of the week (today plus every
+remaining day, at one completion per day, still falls short), not just "behind an even
+daily pace." Falling behind pace while the target is still reachable is "on_track" --
+flagging that as past-due reads as an alarm for something that isn't actually a problem
+yet.
 """
-import math
 from datetime import datetime, timedelta
 
 
@@ -31,10 +33,9 @@ def compute_due_status(weekly_count: int, weekly_target: int, iso_weekday: int) 
     """iso_weekday: Mon=1 .. Sun=7."""
     if weekly_target <= 0 or weekly_count >= weekly_target:
         return "complete"
-    expected_by_now = math.ceil(weekly_target * iso_weekday / 7)
-    if weekly_count < expected_by_now:
-        return "past_due"
-    return "on_track"
+    days_remaining_inclusive = (7 - iso_weekday) + 1  # today (still in progress) through Sunday
+    still_reachable = weekly_count + days_remaining_inclusive >= weekly_target
+    return "on_track" if still_reachable else "past_due"
 
 
 def latest_submission_date_by_exercise(subs) -> dict[str, "date"]:
