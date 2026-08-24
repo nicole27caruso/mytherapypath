@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, FileVideo, Library, Activity } from 'lucide-react'
+import { LayoutDashboard, Users, FileVideo, Library } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -16,14 +17,11 @@ export function Sidebar() {
 
   return (
     <aside className="fixed inset-y-0 left-0 w-64 bg-slate-900 flex flex-col z-20">
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700">
-        <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center">
-          <Activity className="w-5 h-5 text-white" />
+      <div className="flex flex-col gap-2 px-6 py-5 border-b border-slate-700">
+        <div className="bg-white rounded-lg px-3 py-2 w-fit">
+          <Image src="/logo.png" alt="MyTherapyPath" width={989} height={322} className="h-7 w-auto" priority />
         </div>
-        <div>
-          <p className="text-white font-semibold text-sm leading-none">MyTherapyPath</p>
-          <p className="text-slate-400 text-xs mt-0.5">Therapist Portal</p>
-        </div>
+        <p className="text-slate-400 text-xs">Therapist Portal</p>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">

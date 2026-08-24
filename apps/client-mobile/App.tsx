@@ -1181,8 +1181,7 @@ function LoginScreen({
       style={[s.loginScreen, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={s.loginEmoji}>⭐</Text>
-      <Text style={s.loginTitle}>MyTherapyPath</Text>
+      <Image source={require('./assets/logo.png')} style={s.loginLogo} resizeMode="contain" />
       <Text style={s.loginSub}>Enter the access code your therapist gave you</Text>
 
       <TextInput
@@ -1602,8 +1601,7 @@ const s = StyleSheet.create({
     flex: 1, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  loginEmoji: { fontSize: 48, marginBottom: 8 },
-  loginTitle: { fontSize: 24, fontWeight: '700', color: '#1E293B', marginBottom: 6 },
+  loginLogo: { width: 220, height: 72, marginBottom: 12 },
   loginSub: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 28 },
   loginInput: {
     width: '100%', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12,
