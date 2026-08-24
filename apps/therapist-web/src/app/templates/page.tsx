@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { AssignDrawer } from '@/components/assign-drawer'
 import { LibraryExerciseModal, type LibraryExerciseFormValues } from '@/components/library-exercise-modal'
-import { Plus, Clock, Search, Pencil, Trash2, ChevronRight, SquarePlay, Lock } from 'lucide-react'
+import { Plus, Clock, Search, Pencil, Trash2, ChevronRight, SquarePlay, Lock, ShieldAlert } from 'lucide-react'
 
 function youtubeThumbnail(url: string): string | null {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{6,})/)
@@ -16,7 +16,7 @@ function youtubeThumbnail(url: string): string | null {
 }
 
 export default function TemplatesPage() {
-  const { library, refreshLibrary, createLibraryExercise, updateLibraryExercise, deleteLibraryExercise, handleAssign } = useApp()
+  const { library, clientList, refreshLibrary, createLibraryExercise, updateLibraryExercise, deleteLibraryExercise, handleAssign } = useApp()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [showAdd, setShowAdd] = useState(false)
@@ -48,6 +48,7 @@ export default function TemplatesPage() {
       duration_minutes: values.duration_minutes ? parseInt(values.duration_minutes, 10) : null,
       video_url: values.video_url.trim() || null,
       video_source: values.video_url.trim() ? values.video_source : null,
+      recorded_for_client_id: values.recorded_for_client_id || null,
     }
     if (editingId) {
       await updateLibraryExercise(editingId, body)
@@ -171,6 +172,15 @@ export default function TemplatesPage() {
                     <Clock className="w-3.5 h-3.5" />
                     {exercise.duration_minutes} min
                   </span>
+                )}
+
+                {exercise.recorded_for_client_id && (
+                  <div className="mb-3 flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Private to {clientList.find(c => c.id === exercise.recorded_for_client_id)?.name ?? 'a client'} -- re-record before reusing elsewhere
+                    </span>
+                  </div>
                 )}
 
                 <div className="flex items-center justify-end pt-3 border-t">

@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useApp } from '@/lib/app-context'
 import type { ApiTemplate } from '@/lib/api'
-import { X, SquarePlay, Upload, Loader2 } from 'lucide-react'
+import { X, SquarePlay, Upload, Loader2, ShieldAlert } from 'lucide-react'
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 
@@ -17,6 +18,7 @@ export type LibraryExerciseFormValues = {
   duration_minutes: string
   video_source: 'youtube' | 'upload'
   video_url: string
+  recorded_for_client_id: string | null
 }
 
 interface LibraryExerciseModalProps {
@@ -30,10 +32,11 @@ interface LibraryExerciseModalProps {
 const EMPTY: LibraryExerciseFormValues = {
   title: '', category: '', description: '', typically_used_for: '',
   duration_minutes: '', video_source: 'youtube', video_url: '',
+  recorded_for_client_id: null,
 }
 
 export function LibraryExerciseModal({ open, onClose, editing, categories, onSave }: LibraryExerciseModalProps) {
-  const { uploadLibraryVideo } = useApp()
+  const { uploadLibraryVideo, clientList } = useApp()
   const [values, setValues] = useState<LibraryExerciseFormValues>(EMPTY)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -51,6 +54,7 @@ export function LibraryExerciseModal({ open, onClose, editing, categories, onSav
         duration_minutes: editing.duration_minutes ? String(editing.duration_minutes) : '',
         video_source: editing.video_source === 'upload' ? 'upload' : 'youtube',
         video_url: editing.video_url ?? '',
+        recorded_for_client_id: editing.recorded_for_client_id ?? null,
       })
       setUploadedFileName('')
     } else {
@@ -176,7 +180,7 @@ export function LibraryExerciseModal({ open, onClose, editing, categories, onSav
               <label className="text-sm font-medium text-slate-700 block mb-2">Video</label>
               <div className="flex rounded-lg border overflow-hidden h-9 mb-3">
                 <button
-                  onClick={() => setValues(v => ({ ...v, video_source: 'youtube' }))}
+                  onClick={() => setValues(v => ({ ...v, video_source: 'youtube', recorded_for_client_id: null }))}
                   className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors ${values.video_source === 'youtube' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
                 >
                   <SquarePlay className="w-4 h-4" />
@@ -221,6 +225,40 @@ export function LibraryExerciseModal({ open, onClose, editing, categories, onSav
                   )}
                   {uploadError && (
                     <p className="text-xs text-red-500 mt-1.5">{uploadError}</p>
+                  )}
+
+                  <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={!!values.recorded_for_client_id}
+                      onChange={e => setValues(v => ({ ...v, recorded_for_client_id: e.target.checked ? (v.recorded_for_client_id || clientList[0]?.id || '') : null }))}
+                    />
+                    <span className="text-xs text-slate-600 leading-relaxed">
+                      This footage shows a specific client (not the therapist demonstrating). It'll be marked private and can't be assigned to any other client until it's re-recorded.
+                    </span>
+                  </label>
+
+                  {values.recorded_for_client_id !== null && (
+                    <div className="mt-2">
+                      <Select
+                        value={values.recorded_for_client_id}
+                        onValueChange={value => setValues(v => ({ ...v, recorded_for_client_id: value }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Which client is in this video?" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clientList.map(c => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-2 flex items-start gap-1.5">
+                        <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        Private to this client under HIPAA -- hidden from "Add from library" when assigning to anyone else.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}

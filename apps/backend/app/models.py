@@ -66,9 +66,16 @@ class ExerciseTemplate(Base):
     category           = Column(String(100))
     duration_minutes   = Column(Integer)
     therapist_id       = Column(String, nullable=True, index=True)          # null = shared library item; set = that therapist's private addition
+    # Set when video_url shows a specific client performing the exercise (as opposed to
+    # the therapist demonstrating, or a generic/stock link) -- privacy-sensitive under
+    # HIPAA, so this footage must not be reused for any other client. Kept in the library
+    # for the therapist's own reference only; the assign flows filter it out for anyone
+    # other than this client until it's replaced with a non-client-specific recording.
+    recorded_for_client_id = Column(String, ForeignKey("clients.id"), nullable=True)
     created_at         = Column(DateTime, default=datetime.utcnow)
 
     program_exercises = relationship("ProgramExercise", back_populates="template")
+    recorded_for_client = relationship("Client", foreign_keys=[recorded_for_client_id])
 
 
 class Program(Base):

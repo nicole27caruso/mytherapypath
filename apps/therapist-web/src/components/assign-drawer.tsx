@@ -39,13 +39,18 @@ export function AssignDrawer({ open, onClose, preselectedClientId, preselectedEx
   const preExercise = library.find(t => t.id === preselectedExerciseId)
   const preClient = clientList.find(c => c.id === preselectedClientId)
 
+  const [clientId, setClientId] = useState(preselectedClientId ?? '')
+  const resolvedClientId = preselectedClientId || clientId
+
+  // Exercises recorded with a specific client are HIPAA-restricted to that client's
+  // own program -- hide them from the picker entirely for anyone else, rather than
+  // relying on the therapist to remember not to reuse the footage.
   const libraryByCategory = new Map<string, ApiTemplate[]>()
   for (const t of library) {
+    if (t.recorded_for_client_id && t.recorded_for_client_id !== resolvedClientId) continue
     const key = t.category ?? 'Other'
     libraryByCategory.set(key, [...(libraryByCategory.get(key) ?? []), t])
   }
-
-  const [clientId, setClientId] = useState(preselectedClientId ?? '')
   const [frequency, setFrequency] = useState(existingFrequency ?? 3)
   const initialExercises = existingExercises ?? (preExercise ? [libraryToExercise(preExercise, existingFrequency ?? 3)] : [])
   const [exercises, setExercises] = useState<ExerciseEntry[]>(initialExercises)

@@ -14,6 +14,7 @@ class TemplateBase(BaseModel):
     video_source: Optional[str] = None       # youtube | upload
     category: Optional[str] = None
     duration_minutes: Optional[int] = None
+    recorded_for_client_id: Optional[str] = None  # set = video shows this client; HIPAA-restricted to their program only
 
 class TemplateCreate(TemplateBase):
     therapist_id: Optional[str] = None       # null = shared library item; set = that therapist's private addition
@@ -27,6 +28,7 @@ class TemplateUpdate(BaseModel):
     video_source: Optional[str] = None
     category: Optional[str] = None
     duration_minutes: Optional[int] = None
+    recorded_for_client_id: Optional[str] = None
 
 class TemplateOut(TemplateBase):
     model_config = ConfigDict(from_attributes=True)

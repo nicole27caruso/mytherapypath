@@ -13,6 +13,7 @@ type LibraryExerciseInput = {
   typically_used_for?: string | null;
   video_url?: string | null; video_source?: 'youtube' | 'upload' | null;
   category?: string | null; duration_minutes?: number | null;
+  recorded_for_client_id?: string | null;
 }
 
 type AppContextValue = {

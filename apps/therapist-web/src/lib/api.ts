@@ -50,6 +50,7 @@ export type ApiTemplate = {
   category: string | null
   duration_minutes: number | null
   therapist_id: string | null
+  recorded_for_client_id: string | null
   created_at: string
 }
 

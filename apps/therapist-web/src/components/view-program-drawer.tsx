@@ -40,8 +40,11 @@ interface ViewProgramDrawerProps {
 
 export function ViewProgramDrawer({ open, clientId, onClose, programOverride, onSaveProgram }: ViewProgramDrawerProps) {
   const { clientList, submissionList, library, logSession } = useApp()
+  // Exercises recorded with a specific client are HIPAA-restricted to that client's own
+  // program -- hide them from the picker entirely for anyone else.
   const libraryByCategory = new Map<string, ApiTemplate[]>()
   for (const t of library) {
+    if (t.recorded_for_client_id && t.recorded_for_client_id !== clientId) continue
     const key = t.category ?? 'Other'
     libraryByCategory.set(key, [...(libraryByCategory.get(key) ?? []), t])
   }
