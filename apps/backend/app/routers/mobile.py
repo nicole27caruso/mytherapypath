@@ -22,6 +22,43 @@ def _fmt_date(dt) -> str:
     return f"{dt.strftime('%B')} {dt.day}, {dt.year}"
 
 
+def _check_spacing(db: Session, client_id: str, exercise_name: str) -> None:
+    """Reject a submission that arrives before the exercise's min_days_between rest
+    period has elapsed. The mobile UI already hides the submit controls in this case
+    (see ExerciseScreen's isGapRestricted) -- this is the server-side backstop so that
+    guarantee holds even for a request that bypasses the app UI."""
+    pe = (
+        db.query(models.ProgramExercise)
+        .join(models.Program)
+        .join(models.ExerciseTemplate)
+        .filter(models.Program.client_id == client_id)
+        .filter(models.ExerciseTemplate.title == exercise_name)
+        .first()
+    )
+    if not pe or not pe.min_days_between:
+        return
+
+    last_sub = (
+        db.query(models.Submission)
+        .filter(models.Submission.client_id == client_id)
+        .filter(models.Submission.exercise_name == exercise_name)
+        .filter(models.Submission.status != "rejected")
+        .order_by(desc(models.Submission.submitted_at))
+        .first()
+    )
+    if not last_sub or not last_sub.submitted_at:
+        return
+
+    remaining = scheduling.days_until_available(
+        last_sub.submitted_at.date(), pe.min_days_between, datetime.utcnow().date()
+    )
+    if remaining > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This exercise is still resting -- available again in {remaining} day{'s' if remaining != 1 else ''}.",
+        )
+
+
 def _persist_media(request: Request, file: UploadFile | None) -> str | None:
     if file is None or not file.filename:
         return None
@@ -361,6 +398,7 @@ def submit_exercise(
     client: models.Client = Depends(get_current_client),
     db: Session = Depends(get_db),
 ):
+    _check_spacing(db, client.id, exercise_name)
     media_url = _persist_media(request, file)
     sub = models.Submission(
         client_id=client.id,
@@ -391,10 +429,12 @@ def resubmit_exercise(
     if original.client_id != client.id:
         raise HTTPException(status_code=404, detail="Original submission not found")
 
+    resolved_name = exercise_name or original.exercise_name
+    _check_spacing(db, client.id, resolved_name)
     media_url = _persist_media(request, file)
     sub = models.Submission(
         client_id=client.id,
-        exercise_name=exercise_name or original.exercise_name,
+        exercise_name=resolved_name,
         media_type=media_type,
         media_url=media_url,
         status="pending",
