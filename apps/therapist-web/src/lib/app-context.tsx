@@ -32,6 +32,7 @@ type AppContextValue = {
   isLoading: boolean
   addClient: (client: NewClient) => Promise<void>
   toggleClientStatus: (id: string) => Promise<void>
+  updateNextSession: (id: string, nextSession: string) => Promise<void>
   handleAssign: (clientId: string, exercises: ExerciseEntry[], frequency: number, notes: string) => void
   handleSaveProgram: (clientId: string, state: ClientProgramState) => void
   logSession: (clientId: string, exerciseName: string, count?: number) => Promise<void>
@@ -271,6 +272,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function updateNextSession(id: string, nextSession: string) {
+    const client = clientList.find(c => c.id === id)
+    if (!client) return
+    const previous = client.nextSession
+    setClientList(prev => prev.map(c => c.id === id ? { ...c, nextSession } : c))
+    try {
+      await api.clients.update(id, { next_session: nextSession })
+    } catch (err) {
+      console.error('Failed to update next session:', err)
+      setClientList(prev => prev.map(c => c.id === id ? { ...c, nextSession: previous } : c))
+    }
+  }
+
   function handleAssign(clientId: string, exercises: ExerciseEntry[], frequency: number, notes: string) {
     const schedule = clientPrograms[clientId]?.schedule ?? []
     persistProgram(clientId, exercises, frequency, notes, schedule)
@@ -324,7 +338,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       clientList, clientPrograms, library, refreshLibrary, createLibraryExercise, updateLibraryExercise, deleteLibraryExercise, uploadLibraryVideo, submissionList, approved, rejected, rejectionNotes,
-      isLoading, addClient, toggleClientStatus, handleAssign, handleSaveProgram, logSession, signOff, reject,
+      isLoading, addClient, toggleClientStatus, updateNextSession, handleAssign, handleSaveProgram, logSession, signOff, reject,
     }}>
       {children}
     </AppContext.Provider>

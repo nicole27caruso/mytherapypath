@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { FrequencyChips } from '@/components/frequency-chips'
 import { GapChips } from '@/components/gap-chips'
 import { api, type ApiTemplate, type ApiProgram } from '@/lib/api'
-import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, AlignLeft, Library, AlertTriangle, Hourglass, Info } from 'lucide-react'
+import { X, CheckCircle2, Circle, Calendar, Repeat2, Clock, Pencil, Video, Plus, AlignLeft, Library, AlertTriangle, Hourglass, Info, Check } from 'lucide-react'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -39,7 +39,9 @@ interface ViewProgramDrawerProps {
 }
 
 export function ViewProgramDrawer({ open, clientId, onClose, programOverride, onSaveProgram }: ViewProgramDrawerProps) {
-  const { clientList, submissionList, library, logSession } = useApp()
+  const { clientList, submissionList, library, logSession, updateNextSession } = useApp()
+  const [editingNextSession, setEditingNextSession] = useState(false)
+  const [nextSessionDraft, setNextSessionDraft] = useState('')
   // Exercises recorded with a specific client are HIPAA-restricted to that client's own
   // program -- hide them from the picker entirely for anyone else.
   const libraryByCategory = new Map<string, ApiTemplate[]>()
@@ -205,6 +207,16 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
 
   function toggleDay(day: string) {
     setEditSchedule(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
+  }
+
+  function startEditNextSession() {
+    setNextSessionDraft(client?.nextSession && client.nextSession !== '—' ? client.nextSession : '')
+    setEditingNextSession(true)
+  }
+
+  function saveNextSession() {
+    if (clientId && nextSessionDraft) updateNextSession(clientId, nextSessionDraft)
+    setEditingNextSession(false)
   }
 
   async function confirmMarkDone(name: string, count: number) {
@@ -468,7 +480,30 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
               <h3 className="font-semibold text-teal-900">{client.program}</h3>
               <div className="flex items-center gap-4 mt-2 text-xs text-teal-700">
                 <span className="flex items-center gap-1"><Repeat2 className="w-3 h-3" />{weeklyTarget}x per week</span>
-                <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Next: {client.nextSession}</span>
+                {editingNextSession ? (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    <input
+                      type="date"
+                      value={nextSessionDraft}
+                      onChange={e => setNextSessionDraft(e.target.value)}
+                      className="text-xs border rounded px-1 py-0.5 bg-white text-teal-900"
+                      autoFocus
+                    />
+                    <button onClick={saveNextSession} className="text-teal-700 hover:text-teal-900">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setEditingNextSession(false)} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ) : (
+                  <button onClick={startEditNextSession} className="flex items-center gap-1 hover:text-teal-900 hover:underline">
+                    <Calendar className="w-3 h-3" />
+                    Next: {client.nextSession}
+                    <Pencil className="w-2.5 h-2.5 opacity-60" />
+                  </button>
+                )}
               </div>
             </div>
           </div>

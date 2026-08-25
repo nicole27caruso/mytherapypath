@@ -8,7 +8,20 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Users, TrendingUp, FileVideo, ClipboardList, Video, ImageIcon, CheckCircle2, XCircle } from 'lucide-react'
+import { Users, TrendingUp, FileVideo, ClipboardList, Video, ImageIcon, CheckCircle2, XCircle, Calendar } from 'lucide-react'
+
+// Matches the Monday-Sunday UTC week boundary used elsewhere (scheduling.week_start_utc),
+// so "this week" means the same thing across the dashboard, client view, and mobile app.
+function mondayOfWeek(d: Date): string {
+  const diffToMonday = (d.getUTCDay() + 6) % 7
+  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - diffToMonday))
+  return monday.toISOString().split('T')[0]
+}
+function sundayOfWeek(d: Date): string {
+  const diffToMonday = (d.getUTCDay() + 6) % 7
+  const sunday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - diffToMonday + 6))
+  return sunday.toISOString().split('T')[0]
+}
 
 function StatCard({ title, value, subtitle, icon: Icon, color }: {
   title: string; value: string; subtitle: string; icon: React.ElementType; color: string
@@ -51,6 +64,12 @@ export default function DashboardPage() {
   function getRevisionOf(sub: SubmissionEntry) {
     return sub.revisionOf ? submissionList.find(s => s.id === sub.revisionOf) : undefined
   }
+
+  const weekStart = mondayOfWeek(new Date())
+  const weekEnd = sundayOfWeek(new Date())
+  const thisWeekAppointments = clientList
+    .filter(c => c.nextSession && c.nextSession !== '—' && c.nextSession >= weekStart && c.nextSession <= weekEnd)
+    .sort((a, b) => (a.nextSession! < b.nextSession! ? -1 : 1))
 
   return (
     <div className="p-8">
@@ -202,6 +221,41 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-teal-600" />
+                This Week&apos;s Appointments
+              </CardTitle>
+              <Badge variant="secondary" className="bg-teal-100 text-teal-700 text-xs">
+                {thisWeekAppointments.length}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {thisWeekAppointments.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">No appointments scheduled this week.</p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {thisWeekAppointments.map(c => (
+                  <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-50">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${c.color}`}>
+                      {c.initials}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium leading-none">{c.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{c.nextSession}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <SubmissionModal
