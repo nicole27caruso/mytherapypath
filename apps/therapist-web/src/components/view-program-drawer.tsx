@@ -579,19 +579,19 @@ export function ViewProgramDrawer({ open, clientId, onClose, programOverride, on
                   <div
                     key={ex.name}
                     onClick={() => {
-                      if (hasProof || weekComplete) return
+                      if (weekComplete) return
                       setPendingConfirm(ex.name)
                     }}
                     className={`rounded-xl border p-4 transition-colors ${
-                      hasProof || weekComplete ? 'bg-emerald-50 border-emerald-200 cursor-default'
+                      weekComplete ? 'bg-emerald-50 border-emerald-200 cursor-default'
                       : 'bg-white border-slate-200 hover:bg-slate-50 cursor-pointer'
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      {hasProof || weekComplete ? <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                      {weekComplete ? <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
                         : <Circle className="w-5 h-5 text-slate-300 flex-shrink-0 mt-0.5" />}
                       <div>
-                        <p className={`text-sm font-medium ${hasProof || weekComplete ? 'text-emerald-800' : 'text-slate-800'}`}>{ex.name}</p>
+                        <p className={`text-sm font-medium ${weekComplete ? 'text-emerald-800' : 'text-slate-800'}`}>{ex.name}</p>
                         <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{ex.instructions}</p>
                         <div className="flex items-center gap-1 mt-2 text-xs text-slate-400 flex-wrap">
                           <Clock className="w-3 h-3" />

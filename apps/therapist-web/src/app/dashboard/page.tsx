@@ -109,6 +109,41 @@ export default function DashboardPage() {
         />
       </div>
 
+      <div className="mb-8">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-teal-600" />
+                This Week&apos;s Appointments
+              </CardTitle>
+              <Badge variant="secondary" className="bg-teal-100 text-teal-700 text-xs">
+                {thisWeekAppointments.length}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {thisWeekAppointments.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">No appointments scheduled this week.</p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {thisWeekAppointments.map(c => (
+                  <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-50">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${c.color}`}>
+                      {c.initials}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium leading-none">{c.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{c.nextSession}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2">
           <Card>
@@ -221,41 +256,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
-
-      <div className="mt-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-teal-600" />
-                This Week&apos;s Appointments
-              </CardTitle>
-              <Badge variant="secondary" className="bg-teal-100 text-teal-700 text-xs">
-                {thisWeekAppointments.length}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {thisWeekAppointments.length === 0 ? (
-              <p className="text-sm text-slate-400 italic">No appointments scheduled this week.</p>
-            ) : (
-              <div className="flex flex-wrap gap-3">
-                {thisWeekAppointments.map(c => (
-                  <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-50">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${c.color}`}>
-                      {c.initials}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium leading-none">{c.name}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{c.nextSession}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       <SubmissionModal
