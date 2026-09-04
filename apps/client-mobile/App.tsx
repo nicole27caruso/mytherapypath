@@ -94,6 +94,8 @@ type ClientInfo = {
  totalWeeklyCount: number
  nextSession?: string | null
  therapistName: string
+ reminderHour: number
+ reminderMinute: number
 }
 
 type DueStatus = 'complete' | 'on_track' | 'past_due'
@@ -901,7 +903,24 @@ function RevisionScreen({
 
 // ─── Progress Screen ──────────────────────────────────────────────────────────
 
-function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; clientInfo: ClientInfo }) {
+const REMINDER_TIME_OPTIONS = [
+  { label: '8:00 AM', hour: 8, minute: 0 },
+  { label: '9:00 AM', hour: 9, minute: 0 },
+  { label: '12:00 PM', hour: 12, minute: 0 },
+  { label: '3:00 PM', hour: 15, minute: 0 },
+  { label: '4:00 PM', hour: 16, minute: 0 },
+  { label: '5:00 PM', hour: 17, minute: 0 },
+  { label: '6:00 PM', hour: 18, minute: 0 },
+  { label: '7:00 PM', hour: 19, minute: 0 },
+]
+
+function ProgressScreen({
+  completed, clientInfo, onUpdateReminder,
+}: {
+  completed: Set<string>
+  clientInfo: ClientInfo
+  onUpdateReminder: (hour: number, minute: number) => void
+}) {
   const todayDayIndex = new Date().getDay()
   const todayLabel = WEEKLY_DAYS[todayDayIndex === 0 ? 6 : todayDayIndex - 1]
   const weeklyTarget = clientInfo.totalWeeklyTarget || clientInfo.frequency || 3
@@ -954,6 +973,23 @@ function ProgressScreen({ completed, clientInfo }: { completed: Set<string>; cli
             {!a.earned && <Text style={s.achLockedLabel}>🔒 Locked</Text>}
           </View>
         ))}
+      </View>
+
+      <Text style={s.sectionTitle}>Reminder Time</Text>
+      <Text style={s.remSubtext}>When should we remind you to do your exercises?</Text>
+      <View style={s.remRow}>
+        {REMINDER_TIME_OPTIONS.map(opt => {
+          const isActive = clientInfo.reminderHour === opt.hour && clientInfo.reminderMinute === opt.minute
+          return (
+            <TouchableOpacity
+              key={opt.label}
+              style={[s.remChip, isActive && s.remChipActive]}
+              onPress={() => onUpdateReminder(opt.hour, opt.minute)}
+            >
+              <Text style={[s.remChipText, isActive && s.remChipTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          )
+        })}
       </View>
     </ScrollView>
   )
@@ -1237,6 +1273,8 @@ export default function App() {
     totalWeeklyCount: 0,
     nextSession: null,
     therapistName: '',
+    reminderHour: 16,
+    reminderMinute: 0,
   })
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [messages, setMessages] = useState<MessageItem[]>([])
@@ -1274,6 +1312,8 @@ export default function App() {
         totalWeeklyCount: data.client.total_weekly_count ?? 0,
         nextSession: data.client.next_session ?? null,
         therapistName: data.client.therapist_name ?? '',
+        reminderHour: data.client.reminder_hour ?? 16,
+        reminderMinute: data.client.reminder_minute ?? 0,
       })
       setExercises(loadedExercises)
       setMessages(data.messages as MessageItem[])
@@ -1359,7 +1399,7 @@ export default function App() {
     await setStoredToken(null)
 
     // Reset client-scoped state so a different login never sees stale data.
-    setClientInfo({ name: '', fullName: '', age: 0, starsTotal: 0, completedThisWeek: 0, weekActivity: [], frequency: 3, totalWeeklyTarget: 0, totalWeeklyCount: 0, nextSession: null, therapistName: '' })
+    setClientInfo({ name: '', fullName: '', age: 0, starsTotal: 0, completedThisWeek: 0, weekActivity: [], frequency: 3, totalWeeklyTarget: 0, totalWeeklyCount: 0, nextSession: null, therapistName: '', reminderHour: 16, reminderMinute: 0 })
     setExercises([])
     setMessages([])
     setCompleted(new Set())
@@ -1397,11 +1437,10 @@ export default function App() {
   useEffect(() => {
     if (!token) return
     setIsLoading(true)
-    loadDashboard()
-    scheduleReminder()
+    loadDashboard().then(() => scheduleReminder())
   }, [token])
 
-  async function scheduleReminder() {
+  async function scheduleReminder(hour?: number, minute?: number) {
     if (Platform.OS === 'web') return
     try {
       const { status } = await Notifications.requestPermissionsAsync()
@@ -1412,10 +1451,28 @@ export default function App() {
           title: `Time for exercises, ${clientInfo.name}! ⭐`,
           body: `${clientInfo.therapistName || 'Your therapist'} has exercises waiting. Let's go!`,
         },
-        trigger: { hour: 16, minute: 0, repeats: true } as any,
+        trigger: { hour: hour ?? clientInfo.reminderHour, minute: minute ?? clientInfo.reminderMinute, repeats: true } as any,
       })
     } catch {
       // Notifications unavailable in this environment
+    }
+  }
+
+  // Explicit user action (picking a new time) -- passes hour/minute directly rather than
+  // relying on clientInfo state having already re-rendered, and persists the choice
+  // server-side so it's remembered on next login/device.
+  async function updateReminderTime(hour: number, minute: number) {
+    setClientInfo(prev => ({ ...prev, reminderHour: hour, reminderMinute: minute }))
+    await scheduleReminder(hour, minute)
+    if (!token) return
+    try {
+      await fetch(`${API_BASE}/mobile/me/reminder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ hour, minute }),
+      })
+    } catch (err) {
+      console.error('Failed to save reminder time:', err)
     }
   }
 
@@ -1542,7 +1599,7 @@ export default function App() {
               onRevise={handleRevise}
             />
           ) : activeTab === 'progress' ? (
-            <ProgressScreen completed={completed} clientInfo={clientInfo} />
+            <ProgressScreen completed={completed} clientInfo={clientInfo} onUpdateReminder={updateReminderTime} />
           ) : (
             <MessagesScreen messages={messages} resubmitted={resubmitted} therapistName={clientInfo.therapistName} onRevise={handleRevise} />
           )}
@@ -1835,6 +1892,17 @@ const s = StyleSheet.create({
   achName: { fontSize: 13, fontWeight: '700', color: '#1E293B', textAlign: 'center' },
   achNameLocked: { color: '#94A3B8' },
   achLockedLabel: { fontSize: 11, color: '#CBD5E1' },
+
+  // Reminder time picker
+  remSubtext: { fontSize: 13, color: '#64748B', marginBottom: 12, marginTop: -4 },
+  remRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  remChip: {
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9,
+    backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#F1F5F9',
+  },
+  remChipActive: { backgroundColor: PURPLE_LIGHT, borderColor: PURPLE },
+  remChipText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+  remChipTextActive: { color: PURPLE },
 
   // Messages
   msgHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },

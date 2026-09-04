@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 
@@ -363,6 +363,8 @@ def get_dashboard(client: models.Client = Depends(get_current_client), db: Sessi
             "next_session": client.next_session,
             "stars_total": total_completed * 5,
             "therapist_name": therapist.name if therapist else None,
+            "reminder_hour": client.reminder_hour,
+            "reminder_minute": client.reminder_minute,
             "program": {
                 "name": program.name if program else None,
                 "frequency_per_week": program.frequency_per_week if program else None,
@@ -387,6 +389,24 @@ def ack_weekly_summary(
     client.last_summary_week_start = scheduling.week_start_utc(datetime.utcnow()).date()
     db.commit()
     return None
+
+
+class ReminderTimeUpdate(BaseModel):
+    hour: int = Field(ge=0, le=23)
+    minute: int = Field(ge=0, le=59)
+
+
+@router.patch("/me/reminder")
+def update_reminder_time(
+    body: ReminderTimeUpdate,
+    client: models.Client = Depends(get_current_client),
+    db: Session = Depends(get_db),
+):
+    """Let the client pick what time of day their daily exercise-reminder notification fires."""
+    client.reminder_hour = body.hour
+    client.reminder_minute = body.minute
+    db.commit()
+    return {"reminder_hour": client.reminder_hour, "reminder_minute": client.reminder_minute}
 
 
 @router.post("/me/submit", status_code=201)
